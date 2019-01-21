@@ -10,9 +10,11 @@ var gl;
 
 var points = []; // Holds all the points defining the snowflake
 
-var trianglePoint1 = vec2(-0.5, -0.5); // Defines the verticies of the starting triangle
-var trianglePoint2 = vec2(0, 0.5);
-var trianglePoint3 = vec2(0.5, -0.5);
+var vertices = [
+    vec2(-0.9, -0.45), // Defines the verticies of the starting triangle
+    vec2(0, 1),
+    vec2(0.9, -0.45)
+];
 
 var numIter = 5; // Defines the number of times to recurse through the algorithm
 
@@ -23,16 +25,17 @@ window.onload = function init()
     gl = WebGLUtils.setupWebGL( canvas );
     if ( !gl ) { alert( "WebGL isn't available" ); }
 
-    // Initialize the vertices array with the defined starting points
+    var edges = [
+        [vertices[2], vertices[1]],
+        [vertices[1], vertices[0]],
+        [vertices[0], vertices[2]]
+    ]
     
-    var vertices = [
-        trianglePoint1,
-        trianglePoint2,
-        trianglePoint3
-    ];
-
-    (vertices[0], vertices[1], vertices[2], numIter);
-
+    for(var i = 0; i < edges.length; i++)
+    {
+        generateTriangle(edges[i][0], edges[i][1], numIter);
+    }
+    
     //
     //  Configure WebGL
     //
@@ -59,39 +62,52 @@ window.onload = function init()
     render();
 };
 
-function triangle( a, b, c )
+function generateTriangle(A, B, iterLeft)
 {
-    points.push( a, b, c );
-}
-
-function divideTriangle( a, b, c, count )
-{
-
-    // check for end of recursion
-    
-    if ( count === 0 ) {
-        triangle( a, b, c );
+    if (iterLeft === 0)
+    {
+        points.push(A, B);
     }
-    else {
-    
-        //bisect the sides
+    else
+    {
+        var C = divide(add(multiply(A, 2), B), 3);
+        var D = divide(add(multiply(B, 2), A), 3);
+        var F = divide(add(A, B), 2);
         
-        var ab = mix( a, b, 0.5 );
-        var ac = mix( a, c, 0.5 );
-        var bc = mix( b, c, 0.5 );
+        var V1 = divide(minus(F, A), length(F, A));
+        var V2 = [V1[1], -V1[0]];
 
-        --count;
+        var E = add(multiply(V2, Math.sqrt(3)/6 * length(B, A)), F);
 
-        // three new triangles
-        
-        divideTriangle( a, ab, ac, count );
-        divideTriangle( c, ac, bc, count );
-        divideTriangle( b, bc, ab, count );
+        generateTriangle(A, C, iterLeft-1);
+        generateTriangle(C, E, iterLeft-1);
+        generateTriangle(E, D, iterLeft-1);
+        generateTriangle(D, B, iterLeft-1);
     }
 }
+
+function multiply(v, num){
+    return [v[0]*num, v[1]*num];
+};
+
+function divide(v, num){
+    return [v[0]/num, v[1]/num];
+};
+ 
+function add(a, b){
+    return [a[0]+b[0], a[1]+b[1]];
+};
+
+function minus(a, b){
+    return [a[0]-b[0], a[1]-b[1]];
+};
+
+function length(a, b){
+    return Math.sqrt(Math.pow(a[0] - b[0],2) + Math.pow(a[1] - b[1],2));
+};
 
 function render()
 {
     gl.clear( gl.COLOR_BUFFER_BIT );
-    gl.drawArrays( gl.TRIANGLES, 0, points.length );
+    gl.drawArrays( gl.LINES, 0, points.length );
 }
