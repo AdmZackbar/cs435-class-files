@@ -8,11 +8,25 @@
 var canvas;
 var gl;
 
+// Circle constants
 var numCircleTriangles = 20;
 var twoPi = 6.28;
 var diskRadius = 20;
+// Square constants
+var squareSideLength = 40;
+// Color constants
+var RED     = vec4(1.0, 0.0, 0.0, 1.0);
+var GREEN   = vec4(0.0, 1.0, 0.0, 1.0);
+var BLUE    = vec4(0.0, 0.0, 1.0, 1.0);
+var MAGENTA = vec4(1.0, 0.0, 1.0, 1.0);
+var CYAN    = vec4(0.0, 1.0, 1.0, 1.0);
+var YELLOW  = vec4(1.0, 1.0, 0.0, 1.0);
 
-var blocks;
+var blocks = [];
+var movingBlockIndex = -1;
+var oldX, oldY;
+
+var vPosition;
 
 var keysPressed = [
     false,
@@ -23,136 +37,76 @@ var keysPressed = [
     false
 ]
 
+/*
+ * Abstract base class for building blocks.
+ * NOT meant to be instantiated.
+ */
 class Block
 {
-    constructor(color, centerX, centerY, radius)
+    constructor(color)
     {
-        this.isDisk = true;
-        this.isSquare = false;
         this.color = color;
-        this.points = [vec2(centerX, centerY)];
-        for (var i = 0; i < numCircleTriangles; i++)
-        {
-            x = centerX + (radius * cos(i * twoPi / numCircleTriangles));
-            y = centerY + (radius * sin(i * twoPi / numCircleTriangles));
-            this.points.push(vec2(x, y));
-        }
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.vBuffer;
     }
-    constructor(color, x0, y0, x1, y1, x2, y2, x3, y3)
-    {
-        this.isDisk = false;
-        this.isSquare = true;
-        this.color = color;
-        this.points = [
-            vec2(x0, y0),
-            vec2(x1, y1),
-            vec2(x2, y2),
-            vec2(x3, y3)
-        ];
-    }
-
-    init = function()
+    
+    init()
     {
         this.vBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, flatten(this.points), gl.STATIC_DRAW);
-    };
-
-    draw = function()
+    }
+    
+    draw()
     {
-        var tm = translate(this.points[0][0] + this.OffsetX, this.points[0][1] + this.OffsetY, 0.0);
-        tm = mult(tm, rotate(this.Angle, vec3(0, 0, 1)));
-        tm = mult(tm, translate(-this.points[0][0], -this.points[0][1], 0.0));
-        gl.uniformMatrix4fv(transformation, gl.TRUE, flatten(tm));
-        gl.uniform4fv(fColor, flatten(this.color));
+        //var tm = translate(this.points[0][0] + this.offsetX, this.points[0][1] + this.offsetY, 0.0);
+        //gl.uniform4fv(fColor, flatten(this.color));
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vBuffer);
         gl.vertexAttribPointer(vPosition, 2, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(vPosition);
         
         gl.drawArrays(gl.TRIANGLE_FAN, 0, this.points.length);
-    };
+    }
+    
+    updateOffset(dx, dy)
+    {
+        this.offsetX += dx;
+        this.offsetY += dy;
+    }
 }
 
-class BlockOld
+class Disk extends Block
 {
-    constructor(numVertex, color, x0, y0, x1, y1, x2, y2, x3, y3)
+    constructor(color, centerX, centerY, radius)
     {
-        this.NumVertices = numVertex;
-        this.color = color;
+        super(color);
+        this.isDisk = true;
+        this.isSquare = false;
+        this.points = [vec2(centerX, centerY)];
+        for (var i = 0; i < numCircleTriangles; i++)
+        {
+            var x = centerX + (radius * Math.cos(i * twoPi / numCircleTriangles));
+            var y = centerY + (radius * Math.sin(i * twoPi / numCircleTriangles));
+            this.points.push(vec2(x, y));
+        }
+    }
+}
+
+class Square extends Block
+{
+    constructor(color, centerX, centerY, sideLength)
+    {
+        super(color);
+        this.isDisk = false;
+        this.isSquare = true;
         this.points = [
-            vec2(x0, y0),
-            vec2(x1, y1),
-            vec2(x2, y2),
-            vec2(x3, y3)
+            vec2(centerX-(sideLength/2), centerY+(sideLength/2)),
+            vec2(centerX-(sideLength/2), centerY-(sideLength/2)),
+            vec2(centerX+(sideLength/2), centerY-(sideLength/2)),
+            vec2(centerX+(sideLength/2), centerY+(sideLength/2))
         ];
     }
-
-    vBuffer = 0;
-    OffsetX = 0;
-    OffsetY = 0;
-    Angle = 0;
-    UpdateOffset = function(dx, dy)
-    {
-        this.OffsetX += dx;
-        this.OffsetY += dy;
-    };
-    SetOffset = function(dx, dy)
-    {
-        this.OffsetX = dx;
-        this.OffsetY = dy;
-    };
-    UpdateAngle = function(deg)
-    {
-        this.Angle += deg;
-    };
-    SetAngle = function(deg)
-    {
-        this.Angle = deg;
-    };
-    isLeft = function(x, y, id)
-    {
-        var id1 = (id + 1) % this.NumVertices;
-        return (y - this.points[id][1]) * (this.points[id1][0] - this.points[id][0]) > (x - this.points[id][0]) * (this.points[id1][1] - this.points[id][1]);
-    };
-    transform = function(x, y)
-    {
-        var theta = -Math.PI / 180 * this.Angle; // in radians
-        var x2 = this.points[0][0] + (x - this.points[0][0] - this.OffsetX) * Math.cos(theta) - (y - this.points[0][1] - this.OffsetY) * Math.sin(theta);
-        var y2 = this.points[0][1] + (x - this.points[0][0] - this.OffsetX) * Math.sin(theta) + (y - this.points[0][1] - this.OffsetY) * Math.cos(theta);
-        return vec2(x2, y2);
-    };
-    isInside = function(x, y)
-    {
-        var p = this.transform(x, y);
-        for (var i = 0; i < this.NumVertices; i++) {
-            if (!this.isLeft(p[0], p[1], i))
-                return false;
-        }
-        return true;
-    };
-    init = function()
-    {
-        this.vBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, flatten(this.points), gl.STATIC_DRAW);
-    };
-    draw = function()
-    {
-        var tm = translate(this.points[0][0] + this.OffsetX, this.points[0][1] + this.OffsetY, 0.0);
-        tm = mult(tm, rotate(this.Angle, vec3(0, 0, 1)));
-        tm = mult(tm, translate(-this.points[0][0], -this.points[0][1], 0.0));
-        gl.uniformMatrix4fv(transformation, gl.TRUE, flatten(tm));
-        gl.uniform4fv(fColor, flatten(this.color));
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vBuffer);
-        gl.vertexAttribPointer(vPosition, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(vPosition);
-        if (this.NumVertices == 3) {
-            gl.drawArrays(gl.TRIANGLES, 0, this.NumVertices);
-        }
-        else {
-            gl.drawArrays(gl.TRIANGLE_FAN, 0, this.NumVertices);
-        }
-    };
 }
 
 window.onload = function init()
@@ -160,16 +114,20 @@ window.onload = function init()
     canvas = document.getElementById("gl-canvas");
     
     gl = WebGLUtils.setupWebGL(canvas);
-    if (!gl) { alert( "WebGL isn't available" ); }
+    if (!gl) { alert("WebGL isn't available"); }
+    
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0.9, 0.9, 1.0, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
-    canvas.addEventListener("keydown", function(event)
+    document.addEventListener("keydown", function(event)
     {
         // If numbers 1-6 are pressed, update the array
         if (event.keyCode >= 49 && event.keyCode <= 54)
             keysPressed[event.keyCode-49] = true;
     })
 
-    canvas.addEventListener("keyup", function(event)
+    document.addEventListener("keyup", function(event)
     {
         // If numbers 1-6 are released, update the array
         if (event.keyCode >= 49 && event.keyCode <= 54)
@@ -205,9 +163,67 @@ window.onload = function init()
             return;
         }
         // Check if a block is to be added
-        
+        if (keysPressed[0]) spawnDisk(RED, x, y);
+        else if (keysPressed[1]) spawnDisk(GREEN, x, y);
+        else if (keysPressed[2]) spawnDisk(BLUE, x, y);
+        else if (keysPressed[3]) spawnSquare(MAGENTA, x, y);
+        else if (keysPressed[4]) spawnSquare(CYAN, x, y);
+        else if (keysPressed[5]) spawnSquare(YELLOW, x, y);
+        else    // Try to move block
+        {
+            for (var i = blocks.length-1; i >= 0; i--)
+            {
+                if (blocks[i].isInside(x, y))
+                {
+                    // Move block to top
+                    var temp = blocks[i];
+                    for (var j = i; j < blocks.length; j++)
+                        blocks[j] = blocks[j+1];
+                    blocks[blocks.length] = temp;
+                    
+                    movingBlockIndex = blocks.length;
+                    oldX = x;
+                    oldY = y;
+                    
+                    window.requestAnimationFrame(render);
+                }
+            }
+        }
+    })
+    
+    canvas.addEventListener("mouseup", function(event)
+    {
+        if (movingBlockIndex >= 0)
+            movingBlockIndex = -1;
+    })
+    
+    canvas.addEventListener("mousemove", function(event)
+    {
+        if (movingBlockIndex >= 0)
+        {
+            var x = event.pageX - canvas.offsetLeft;
+            var y = event.pageY - canvas.offsetTop;
+            y=canvas.height-y;
+            
+            blocks[movingBlockIndex].updateOffset(x-oldX, y-oldY);
+            oldX=x;
+            oldY=y;
+            window.requestAnimFrame(render);
+        }
     })
 };
+
+function spawnDisk(color, x, y)
+{
+    blocks.push(new Disk(color, x, y, diskRadius));
+    window.requestAnimationFrame(render);
+}
+
+function spawnSquare(color, x, y)
+{
+    blocks.push(new Square(color, x, y, squareSideLength));
+    window.requestAnimationFrame(render);
+}
 
 function render()
 {
