@@ -6,9 +6,9 @@
  */
 
 var numCubeVertices = 36; //(6 faces)(2 triangles/face)(3 vertices/triangle)
-var numCylinderSideVertices = 42;   // (21 outside circle points/circle)(2 circles)
+var numCylinderSideVertices = 42;   // (20 outside circle points/circle + duplicate)(2 circles)
 var numCylinderTopVertices = 22;    // (20 outside vertices + center + duplicate)
-var numCylinderTopVertices = 22;    // (20 outside vertices + center + duplicate)
+var numCylinderBottomVertices = 22;    // (20 outside vertices + center + duplicate)
 
 var cubePoints = [], cubeColors = [];
 var cylinderTopPoints = [], cylinderBottomPoints = [], cylinderSidePoints = [];
@@ -309,10 +309,10 @@ var CHAR_HEIGHT = 1;
 var CHAR_DEPTH = 0.5
 var DOT_SUBDIVISION = 5;
 
-var CONNECTOR_HEIGHT    = 1;
+var CONNECTOR_HEIGHT    = 4;
 var CONNECTOR_RADIUS    = 0.5;
 var DOT_HEIGHT          = 0.5;
-var DOT_RADIUS          = CHAR_HEIGHT/DOT_SUBDIVISION/2;
+var DOT_RADIUS          = CHAR_HEIGHT/DOT_SUBDIVISION/3;
 
 var MAX_WORD_LENGTH = 12;   // Max number of characters per word
 var WORD_DELAY = 1000;  // Milliseconds per word
@@ -321,17 +321,18 @@ var WORD_DELAY = 1000;  // Milliseconds per word
 var modelViewMatrix, projectionMatrix;
 
 // Array of rotation angles (in degrees) for each rotation axis
-var baseTheta = 45;
-var offsetAngle = 0;
+var baseTheta = 35;
 var cylinderTheta = 15;
 var displayTheta = 0;
 
 var paused = false;
 
 var modelViewMatrixLoc;
+var vPosition, vColor;
 
 var cubeVBuffer, cubeCBuffer;
-var cylinderVBuffer, cylinderCBuffer;
+var cylinderBottomVBuffer, cylinderSideVBuffer, cylinderTopVBuffer;
+var cylinderBottomCBuffer, cylinderSideCBuffer, cylinderTopCBuffer;
 
 function quad(  a,  b,  c,  d ) {
     cubeColors.push(vertexColors[a]); 
@@ -361,28 +362,24 @@ function colorCylinder()
 {
     var theta = 2 * Math.PI / NUM_SEGMENTS;
 
-    cylinderBottomPoints.push(vec4(0.0, 0.0, 0.0, 1.0));
+    cylinderBottomPoints.push(vec4(0.0, -0.5, 0.0, 1.0));
     cylinderBottomColors.push(vertexColors[2]);
-    cylinderTopPoints.push(vec4(0.0, 1, 0.0, 1.0));
+    cylinderTopPoints.push(vec4(0.0, 0.5, 0.0, 1.0));
     cylinderTopColors.push(vertexColors[1]);
 
-    for (var i = 0; i < NUM_SEGMENTS; i++)
+    for (var i = 0; i <= NUM_SEGMENTS; i++)
     {
         var x = Math.cos(theta * i), z = Math.sin(theta * i);
 
-        cylinderBottomPoints.push(vec4(x, 0.0, z, 1.0));
+        cylinderBottomPoints.push(vec4(x, -0.5, z, 1.0));
         cylinderBottomColors.push(vertexColors[2]);
-        cylinderTopPoints.push(vec4(x, 1, z, 1.0));
+        cylinderTopPoints.push(vec4(x, 0.5, z, 1.0));
         cylinderTopColors.push(vertexColors[1]);
-        cylinderSidePoints.push(vec4(x, 0.0, z, 1.0));
-        cylinderSidePoints.push(vec4(x, 1, z, 1.0));
-        cylinderSideColors.push(vertexColors[6]);
-        cylinderSideColors.push(vertexColors[6]);
+        cylinderSidePoints.push(vec4(x, -0.5, z, 1.0));
+        cylinderSidePoints.push(vec4(x, 0.5, z, 1.0));
+        cylinderSideColors.push(vertexColors[7]);
+        cylinderSideColors.push(vertexColors[7]);
     }
-
-    cylinderBottomPoints.push(vec4(1, 1, 0.0, 1.0));
-    cylinderBottomColors.push(vertexColors[2]);
-    cylinderTopPoints.push(vec4(1, 1, 0.0, 1.0));
 }
 
 function scale4(a, b, c) {
@@ -422,36 +419,48 @@ window.onload = function init() {
     gl.enable( gl.DEPTH_TEST ); 
     
     // Load shaders and initialize attribute buffers
-    program = initShaders( gl, "vertex-shader", "fragment-shader" );
+    program = initShaders(gl, "vertex-shader", "fragment-shader");
     
-    gl.useProgram( program );
+    gl.useProgram(program);
 
     colorCube();
     colorCylinder();
 
-    // Create and initialize cube buffer objects
+    // Create and initialize buffer objects
     cubeVBuffer = gl.createBuffer();
-    gl.bindBuffer( gl.ARRAY_BUFFER, cubeVBuffer );
-    gl.bufferData( gl.ARRAY_BUFFER, flatten(cubePoints), gl.STATIC_DRAW );
-    
-    var vPosition = gl.getAttribLocation( program, "vPosition" );
-    gl.vertexAttribPointer( vPosition, 4, gl.FLOAT, false, 0, 0 );
-    gl.enableVertexAttribArray( vPosition );
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cubePoints), gl.STATIC_DRAW);
+    cylinderBottomVBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderBottomVBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cylinderBottomPoints), gl.STATIC_DRAW);
+    cylinderTopVBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderTopVBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cylinderTopPoints), gl.STATIC_DRAW);
+    cylinderSideVBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderSideVBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cylinderSidePoints), gl.STATIC_DRAW);
 
     cubeCBuffer = gl.createBuffer();
-    gl.bindBuffer( gl.ARRAY_BUFFER, cubeCBuffer );
-    gl.bufferData( gl.ARRAY_BUFFER, flatten(cubeColors), gl.STATIC_DRAW );
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeCBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cubeColors), gl.STATIC_DRAW);
+    cylinderBottomCBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderBottomCBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cylinderBottomColors), gl.STATIC_DRAW);
+    cylinderTopCBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderTopCBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cylinderTopColors), gl.STATIC_DRAW);
+    cylinderSideCBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderSideCBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cylinderSideColors), gl.STATIC_DRAW);
 
-    var vColor = gl.getAttribLocation( program, "vColor" );
-    gl.vertexAttribPointer( vColor, 4, gl.FLOAT, false, 0, 0 );
-    gl.enableVertexAttribArray( vColor );
+    vPosition = gl.getAttribLocation(program, "vPosition");
+    vColor = gl.getAttribLocation(program, "vColor");
+    modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
 
     document.getElementById("ButtonUp").onclick = onUpKey;
     document.getElementById("ButtonDown").onclick = onDownKey;
     document.getElementById("ButtonLeft").onclick = onLeftKey;
     document.getElementById("ButtonRight").onclick = onRightKey;
-    
-    modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
 
     projectionMatrix = ortho(-10, 10, -10, 10, -10, 10);
     gl.uniformMatrix4fv(gl.getUniformLocation(program, "projectionMatrix"), false, flatten(projectionMatrix));
@@ -502,33 +511,109 @@ function changeWord()
 
 function base() {
     var s = scale4(BASE_WIDTH, BASE_HEIGHT, BASE_WIDTH);
-    var instanceMatrix = mult( translate( 0.0, 0.5 * BASE_HEIGHT, 0.0 ), s);
+    var instanceMatrix = mult( translate( 0.0, 0.5 * BASE_HEIGHT, 0.0), s);
     var t = mult(modelViewMatrix, instanceMatrix);
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t) );
-    gl.drawArrays( gl.TRIANGLES, 0, numCubeVertices );
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
+    
+    gl.drawArrays(gl.TRIANGLES, 0, numCubeVertices);
 }
 
-// TODO CHANGE TO CYLINDER
-function lowerArm()
+function connector()
 {
-    var s = scale4(LOWER_ARM_WIDTH, LOWER_ARM_HEIGHT, LOWER_ARM_WIDTH);
-    var instanceMatrix = mult( translate( 0.0, 0.5 * LOWER_ARM_HEIGHT, 0.0 ), s);
+    connectorBottom();
+    connectorSides();
+    connectorTop();
+}
+
+function connectorBottom()
+{
+    var s = scale4(CONNECTOR_RADIUS*2, CONNECTOR_HEIGHT, CONNECTOR_RADIUS*2);
+    var instanceMatrix = mult(translate( 0.0, 0.5 * CONNECTOR_HEIGHT, 0.0), s);
     var t = mult(modelViewMatrix, instanceMatrix);
-    gl.uniformMatrix4fv( modelViewMatrixLoc, false, flatten(t) );
-    gl.drawArrays( gl.TRIANGLES, 0, numCubeVertices );
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderBottomVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderBottomCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
+
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, numCylinderBottomVertices);
+}
+
+function connectorSides()
+{
+    var s = scale4(CONNECTOR_RADIUS*2, CONNECTOR_HEIGHT, CONNECTOR_RADIUS*2);
+    var instanceMatrix = mult(translate( 0.0, 0.5 * CONNECTOR_HEIGHT, 0.0), s);
+    var t = mult(modelViewMatrix, instanceMatrix);
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderSideVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderSideCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, numCylinderSideVertices);
+}
+
+function connectorTop()
+{
+    var s = scale4(CONNECTOR_RADIUS*2, CONNECTOR_HEIGHT, CONNECTOR_RADIUS*2);
+    var instanceMatrix = mult(translate( 0.0, 0.5 * CONNECTOR_HEIGHT, 0.0), s);
+    var t = mult(modelViewMatrix, instanceMatrix);
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderTopVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderTopCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
+
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, numCylinderTopVertices);
 }
 
 function display()
 {
     var s = scale4(DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_WIDTH/2);
-    var instanceMatrix = mult( translate( 0.0, 0.5 * DISPLAY_HEIGHT, 0.0 ), s);
+    var instanceMatrix = mult( translate( 0.0, 0.5 * DISPLAY_HEIGHT, 0.0), s);
     var t = mult(modelViewMatrix, instanceMatrix);
-    gl.uniformMatrix4fv( modelViewMatrixLoc, false, flatten(t) );
-    gl.drawArrays( gl.TRIANGLES, 0, numCubeVertices );
+    gl.uniformMatrix4fv( modelViewMatrixLoc, false, flatten(t));
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
+
+    gl.drawArrays( gl.TRIANGLES, 0, numCubeVertices);
 }
 
 function text()
 {
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
     for (var i = 0; i < word.length && i < MAX_WORD_LENGTH; i++)
     {
         modelViewMatrix = mult(modelViewMatrix, translate(CHAR_HEIGHT, 0, 0.0));
@@ -555,26 +640,77 @@ function character(char)
 
 function charDot(localMVM)
 {
-    var s = scale4(CHAR_HEIGHT/DOT_SUBDIVISION, CHAR_DEPTH, CHAR_HEIGHT/DOT_SUBDIVISION);
-    var instanceMatrix = mult( translate( 0.0, 0.5 * CHAR_HEIGHT/DOT_SUBDIVISION, 0.0 ), s);
+    charDotBottom(localMVM);
+    charDotSides(localMVM);
+    charDotTop(localMVM);
+}
+
+function charDotBottom(localMVM)
+{
+    var s = scale4(DOT_RADIUS*2, DOT_HEIGHT, DOT_RADIUS*2);
+    var instanceMatrix = mult(translate( 0.0, 0.5 * DOT_HEIGHT, 0.0), s);
     var t = mult(localMVM, instanceMatrix);
-    gl.uniformMatrix4fv( modelViewMatrixLoc, false, flatten(t) );
-    gl.drawArrays( gl.TRIANGLES, 0, numCubeVertices );
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderBottomVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderBottomCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
+
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, numCylinderBottomVertices);
+}
+
+function charDotSides(localMVM)
+{
+    var s = scale4(DOT_RADIUS*2, DOT_HEIGHT, DOT_RADIUS*2);
+    var instanceMatrix = mult(translate( 0.0, 0.5 * DOT_HEIGHT, 0.0), s);
+    var t = mult(localMVM, instanceMatrix);
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderSideVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderSideCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, numCylinderSideVertices);
+}
+
+function charDotTop(localMVM)
+{
+    var s = scale4(DOT_RADIUS, DOT_HEIGHT, DOT_RADIUS);
+    var instanceMatrix = mult(translate( 0.0, 0.5 * DOT_HEIGHT, 0.0), s);
+    var t = mult(localMVM, instanceMatrix);
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderTopVBuffer);
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cylinderTopCBuffer);
+    gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vColor);
+
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, numCylinderTopVertices);
 }
 
 var render = function()
 {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     
-    modelViewMatrix = rotate(offsetAngle, 0, 1, 0);
-    modelViewMatrix = mult(modelViewMatrix, rotate(baseTheta, 1, 0, 0));
+    modelViewMatrix = rotate(baseTheta, 1, 0, 0);
     base();
  
     modelViewMatrix = mult(modelViewMatrix, translate(0.0, BASE_HEIGHT, 0.0)); 
     modelViewMatrix = mult(modelViewMatrix, rotate(cylinderTheta, 0, 1, 0));
-    lowerArm();
+    connector();
 
-    modelViewMatrix = mult(modelViewMatrix, translate(0.0, LOWER_ARM_HEIGHT, 0.0));
+    modelViewMatrix = mult(modelViewMatrix, translate(0.0, CONNECTOR_HEIGHT, 0.0));
     modelViewMatrix = mult(modelViewMatrix, rotate(displayTheta, 1, 0, 0));
     display();
 
