@@ -3,6 +3,10 @@
  * Author:  Zach Wassynger
  * Purpose: Part of project 3 in CS 435. Creates a 3D text displayer in which a string of words
  *          is displayed at a given rate. The display can be manipulated in space.
+ * Input:   Arrow keys/WASD: manipulate the display and the cylinder rotation. Up/down(W/S) change the
+ *          vertical orientation of the display board; Left/right(A/D) change the rotation of the cylinder.
+ *          Toggling the pause button(spacebar) pauses and resumes the changing of the text.
+ *          The paragraph of words that is displayed can be changed in the HTML file under the <p> "paragraph".
  */
 
 var numCubeVertices = 36; //(6 faces)(2 triangles/face)(3 vertices/triangle)
@@ -31,14 +35,18 @@ var vertices = [
 // RGBA cubeColors
 var vertexColors = [
     vec4( 0.0, 0.0, 0.0, 1.0 ),  // black
-    vec4( 1.0, 0.0, 0.0, 1.0 ),  // red
-    vec4( 0.0, 1.0, 0.0, 1.0 ),  // green
+    vec4( 0.6, 0.6, 1.0, 1.0 ),  // light blue
+    vec4( 0.8, 0.8, 1.0, 1.0 ),  // very light blue
     vec4( 1.0, 1.0, 0.0, 1.0 ),  // yellow
-    vec4( 0.0, 0.0, 1.0, 1.0 ),  // blue
-    vec4( 1.0, 0.0, 1.0, 1.0 ),  // magenta
+    vec4( 0.1, 0.1, 0.4, 1.0 ),  // blue
+    vec4( 0.3, 0.3, 0.6, 1.0 ),  // dark blue
     vec4( 0.6, 0.7, 1.0, 1.0 ),  // light blue
     vec4( 0.0, 1.0, 1.0, 1.0 )   // cyan
 ];
+
+var cylinderTopColor = vec4(1.0, 1.0, 1.0, 1.0);
+var cylinderSideColor = vec4(1.0, 0.3, 0.4, 1.0);
+var cylinderBottomColor = vec4(1.0, 1.0, 1.0, 1.0);
 
 var letters = {
     "a": [
@@ -302,6 +310,7 @@ var LOWER_ARM_HEIGHT    = 4;
 var LOWER_ARM_WIDTH     = 1;
 var DISPLAY_HEIGHT      = 0.7;
 var DISPLAY_WIDTH       = 13;
+var DISPLAY_DEPTH       = 4;
 var NUM_SEGMENTS        = 20;
 
 // Size of the characters
@@ -363,22 +372,22 @@ function colorCylinder()
     var theta = 2 * Math.PI / NUM_SEGMENTS;
 
     cylinderBottomPoints.push(vec4(0.0, -0.5, 0.0, 1.0));
-    cylinderBottomColors.push(vertexColors[2]);
+    cylinderBottomColors.push(cylinderBottomColor);
     cylinderTopPoints.push(vec4(0.0, 0.5, 0.0, 1.0));
-    cylinderTopColors.push(vertexColors[1]);
+    cylinderTopColors.push(cylinderTopColor);
 
     for (var i = 0; i <= NUM_SEGMENTS; i++)
     {
         var x = Math.cos(theta * i), z = Math.sin(theta * i);
 
         cylinderBottomPoints.push(vec4(x, -0.5, z, 1.0));
-        cylinderBottomColors.push(vertexColors[2]);
+        cylinderBottomColors.push(cylinderBottomColor);
         cylinderTopPoints.push(vec4(x, 0.5, z, 1.0));
-        cylinderTopColors.push(vertexColors[1]);
+        cylinderTopColors.push(cylinderTopColor);
         cylinderSidePoints.push(vec4(x, -0.5, z, 1.0));
         cylinderSidePoints.push(vec4(x, 0.5, z, 1.0));
-        cylinderSideColors.push(vertexColors[7]);
-        cylinderSideColors.push(vertexColors[7]);
+        cylinderSideColors.push(cylinderSideColor);
+        cylinderSideColors.push(cylinderSideColor);
     }
 }
 
@@ -401,13 +410,13 @@ window.onload = function init() {
 
     document.addEventListener("keydown", function(event)
     {
-        if (event.keyCode == 37)    // left
+        if (event.keyCode == 37 || event.keyCode == 65)    // left
             onLeftKey();
-        if (event.keyCode == 39)    // right
+        if (event.keyCode == 39 || event.keyCode == 68)    // right
             onRightKey();
-        if (event.keyCode == 38)    // up
+        if (event.keyCode == 38 || event.keyCode == 87)    // up
             onUpKey();
-        if (event.keyCode == 40)    // down
+        if (event.keyCode == 40 || event.keyCode == 83)    // down
             onDownKey();
         if (event.keyCode == 32)    // spacebar
             onSpacebar();
@@ -461,6 +470,7 @@ window.onload = function init() {
     document.getElementById("ButtonDown").onclick = onDownKey;
     document.getElementById("ButtonLeft").onclick = onLeftKey;
     document.getElementById("ButtonRight").onclick = onRightKey;
+    document.getElementById("ButtonPause").onclick = onSpacebar;
 
     projectionMatrix = ortho(-10, 10, -10, 10, -10, 10);
     gl.uniformMatrix4fv(gl.getUniformLocation(program, "projectionMatrix"), false, flatten(projectionMatrix));
@@ -498,9 +508,15 @@ function onRightKey()
 function onSpacebar()
 {
     if (paused)
+    {
         paused = false;
+        document.getElementById("ButtonPause").textContent = "PAUSE";
+    }
     else
+    {
         paused = true;
+        document.getElementById("ButtonPause").textContent = "RESUME";
+    }
 }
 
 function changeWord()
@@ -589,7 +605,7 @@ function connectorTop()
 
 function display()
 {
-    var s = scale4(DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_WIDTH/2);
+    var s = scale4(DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_DEPTH);
     var instanceMatrix = mult( translate( 0.0, 0.5 * DISPLAY_HEIGHT, 0.0), s);
     var t = mult(modelViewMatrix, instanceMatrix);
     gl.uniformMatrix4fv( modelViewMatrixLoc, false, flatten(t));
@@ -614,7 +630,14 @@ function text()
     gl.bindBuffer(gl.ARRAY_BUFFER, cubeCBuffer);
     gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(vColor);
-    for (var i = 0; i < word.length && i < MAX_WORD_LENGTH; i++)
+    
+    var startPoint = (12 - word.length) / 2;
+    if (startPoint < 0)	startPoint = 0;
+    else	startPoint = Math.floor(startPoint);
+    
+    modelViewMatrix = mult(modelViewMatrix, translate(startPoint*CHAR_HEIGHT, 0, 0.0));
+    
+    for (var i = 0; i < word.length && i < (MAX_WORD_LENGTH-startPoint); i++)
     {
         modelViewMatrix = mult(modelViewMatrix, translate(CHAR_HEIGHT, 0, 0.0));
         character(word.charAt(i));
