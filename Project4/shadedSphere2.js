@@ -7,10 +7,10 @@ var normalsArray = [];
 var delta = 0;
 var delta2 = 0;
     
-var lightPosition = vec4(0.0, 0.0, 1.0, 1.0 );
+var lightPosition = vec4(0.0, 0.0, 4.0, 1.0 );
 var lightAmbient = vec4(0.2, 0.2, 0.2, 1.0 );
 var lightDiffuse = vec4( 1.0, 1.0, 1.0, 1.0 );
-var lightSpecular = vec4( 1.0, 1.0, 1.0, 1.0 );
+var lightSpecular = vec4( 0.0, 0.0, 0.0, 1.0 );
 
 var lightDirection = vec3(0.0, 0.0, -1.0);
 var lightAngle = 20;
@@ -27,11 +27,15 @@ var modelViewMatrixLoc, projectionMatrixLoc;
 
 var normalMatrix, normalMatrixLoc;
 
-var eye;
+var lightDirectionLoc;
+
+var eye = vec3(0.0, 0.0, 1.0);
 var at = vec3(0.0, 0.0, 0.0);
 var up = vec3(0.0, 1.0, 0.0);
 
-var spotlightX = 2, spotlightY = 2;
+
+var NUM_POS = 9;
+var spotlightX = Math.floor(NUM_POS/2), spotlightY = Math.floor(NUM_POS/2);
 
 var useVertexShading = false;
 
@@ -116,6 +120,7 @@ window.onload = function init() {
     modelViewMatrixLoc = gl.getUniformLocation( program, "modelViewMatrix" );
     projectionMatrixLoc = gl.getUniformLocation( program, "projectionMatrix" );
     normalMatrixLoc = gl.getUniformLocation( program, "worldInvTrans" );
+    lightDirectionLoc = gl.getUniformLocation(program, "lightDirection");
 
     ambientProduct = mult(lightAmbient, materialAmbient);
     diffuseProduct = mult(lightDiffuse, materialDiffuse);
@@ -132,11 +137,10 @@ window.onload = function init() {
     gl.uniform4fv(gl.getUniformLocation(program, "diffuseProduct"), flatten(diffuseProduct));
     gl.uniform4fv(gl.getUniformLocation(program, "specularProduct"), flatten(specularProduct));
     gl.uniform4fv(gl.getUniformLocation(program, "lightPosition"), flatten(lightPosition));
-    gl.uniform3fv(gl.getUniformLocation(program, "lightDirection"), flatten(lightDirection));
     gl.uniform1f(gl.getUniformLocation(program, "shininess"), materialShininess);
     gl.uniform1f(gl.getUniformLocation(program, "lightAngle"), lightAngle);
 
-    projectionMatrix = ortho(-3, 3, -3, 3, -3, 3);
+    projectionMatrix = ortho(-3, 3, -3, 3, -10, 10);
     gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
 
     render();
@@ -144,10 +148,11 @@ window.onload = function init() {
 
 function onUp()
 {
-    if (spotlightY >= 4)
-        spotlightY = 4;
+    if (spotlightY >= NUM_POS-1)
+        spotlightY = NUM_POS-1;
     else
         spotlightY += 1;
+    render();
 }
 
 function onDown()
@@ -156,6 +161,7 @@ function onDown()
         spotlightY = 0;
     else
         spotlightY -= 1;
+    render();
 }
 
 function onLeft()
@@ -164,14 +170,16 @@ function onLeft()
         spotlightX = 0;
     else
         spotlightX -= 1;
+    render();
 }
 
 function onRight()
 {
-    if (spotlightX >= 4)
-        spotlightX = 4;
+    if (spotlightX >= NUM_POS-1)
+        spotlightX = NUM_POS-1;
     else
         spotlightX += 1;
+    render();
 }
 
 function onVertex()
@@ -187,18 +195,20 @@ function onFragment()
 }
 
 function render() {
-    
     gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     
     //eye = vec3(radius*Math.sin(theta)*Math.cos(phi), 
     //    radius*Math.sin(theta)*Math.sin(phi), radius*Math.cos(theta));
 
-    eye = vec3(0, 0, 2);
+    lightDirection = vec3(subtract(vec4(spotlightX-Math.floor(NUM_POS/2), spotlightY-Math.floor(NUM_POS/2), 0, 0), lightPosition));
+    //console.log(lightDirection);
+    gl.uniform3fv(lightDirectionLoc, flatten(lightDirection));
 
     modelViewMatrix = lookAt(eye, at, up);
-    modelViewMatrix = mult(modelViewMatrix, scale4(2, 2, 1));
+    modelViewMatrix = mult(modelViewMatrix, scale4(3, 3, 1));
+    //modelViewMatrix = mult(modelViewMatrix, translate(0, 3/2, 0));
     modelViewMatrix = mult(modelViewMatrix, rotate(delta, 0, 1, 0));
-    modelViewMatrix = mult(modelViewMatrix, rotate(delta2, 1, 0, 0));
+    //modelViewMatrix = mult(modelViewMatrix, rotate(delta2, 1, 0, 0));
     //projectionMatrix = ortho(left, right, bottom, ytop, near, far);
     
     normalMatrix = [
@@ -217,5 +227,5 @@ function render() {
     //    gl.drawArrays( gl.TRIANGLES, i, 3 );
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    window.requestAnimFrame(render);
+    //window.requestAnimFrame(render);
 }
