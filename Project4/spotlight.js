@@ -99,12 +99,12 @@ window.onload = function init() {
             onDown();
         if (event.keyCode == 74)    // j
         {
-            delta += 5;
+            delta -= 5;
             render();
         }
         if (event.keyCode == 76)    // l
         {
-            delta -= 5;
+            delta += 5;
             render();
         }
         if (event.keyCode == 73)    // i
