@@ -1,70 +1,41 @@
 <!DOCTYPE html>
 <html>
+<head>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+<title>Zach Wassynger - CS 435 - Project #5</title>
 <style type="text/css">
     canvas { background: blue; }
 </style>
-
-<button id = "ButtonX">Rotate X</button>
-<button id = "ButtonY">Rotate Y</button>
-<button id = "ButtonZ">Rotate Z</button>
-
-
-
-
 <script id="vertex-shader" type="x-shader/x-vertex">
-attribute  vec4 vPosition;
-attribute  vec4 vColor;
-attribute  vec2 vTexCoord;
+attribute vec4 vPosition;
+attribute vec4 vColor;
+attribute vec2 vTexCoord;
 
 varying vec4 fColor;
 varying vec2 fTexCoord;
 
-uniform vec3 theta;
 uniform mat4 projectionMatrix;
+uniform mat4 modelViewMatrix;
 
 void main() 
 {
-    // Compute the sines and cosines of theta for each of
-    //   the three axes in one computation.
-    vec3 angles = radians( theta );
-    vec3 c = cos( angles );
-    vec3 s = sin( angles );
-
-    // Remeber: thse matrices are column-major
-    mat4 rx = mat4( 1.0,  0.0,  0.0, 0.0,
-		    0.0,  c.x,  s.x, 0.0,
-		    0.0, -s.x,  c.x, 0.0,
-		    0.0,  0.0,  0.0, 1.0 );
-
-    mat4 ry = mat4( c.y, 0.0, -s.y, 0.0,
-		    0.0, 1.0,  0.0, 0.0,
-		    s.y, 0.0,  c.y, 0.0,
-		    0.0, 0.0,  0.0, 1.0 );
-
-    mat4 rz = mat4( c.z, -s.z, 0.0, 0.0,
-		    s.z,  c.z, 0.0, 0.0,
-		    0.0,  0.0, 1.0, 0.0,
-		    0.0,  0.0, 0.0, 1.0 );
-                
     fColor = vColor;
     fTexCoord = vTexCoord;
-    gl_Position = rz * ry * rx * vPosition;
+    gl_Position = projectionMatrix * modelViewMatrix * vPosition;
 } 
 </script>
 
 <script id="fragment-shader" type="x-shader/x-fragment">
-
 precision mediump float;
 
 varying vec4 fColor;
-varying  vec2 fTexCoord;
+varying vec2 fTexCoord;
 
 uniform sampler2D texture;
 
-void
-main()
+void main()
 {
-    gl_FragColor = fColor * texture2D( texture, fTexCoord );
+    gl_FragColor = fColor * texture2D(texture, fTexCoord);
 }
 </script>
 
@@ -73,11 +44,27 @@ main()
 <script type="text/javascript" src="../Common/MV.js"></script>
 <script type="text/javascript" src="texmap.js"></script>
 
+</head>
 
 <body>
+<button id="ButtonPower">Turn off</button>
+<button id="ButtonPause">Pause</button>
+<button id="ButtonBack">Back</button>
+<button id="ButtonNext">Forward</button>
+<br>
 <canvas id="gl-canvas" width="512" height="512">
 Oops ... your browser doesn't support the HTML5 canvas element
 </canvas>
-<img id = "texImage" src = "Wood.jpg" hidden></img>
+<img id="woodImage" src="WoodTexture.jpg" hidden></img>
+<img id="carpetImage" src="CarpetTexture.jpg" hidden></img>
+<img id="wallpaperImage" src="WallpaperTexture.jpg" hidden></img>
+<img id="plasticImage" src="PlasticTexture.jpg" hidden></img>
+<img id="frame1" src="TVFrame1.jpg" hidden></img>
+<img id="frame2" src="TVFrame2.jpg" hidden></img>
+<img id="frame3" src="TVFrame3.jpg" hidden></img>
+<img id="frame4" src="TVFrame4.jpg" hidden></img>
+<img id="frame5" src="TVFrame5.jpg" hidden></img>
+<img id="frame6" src="TVFrame6.jpg" hidden></img>
+<img id="frame7" src="TVFrame7.jpg" hidden></img>
 </body>
 </html>
