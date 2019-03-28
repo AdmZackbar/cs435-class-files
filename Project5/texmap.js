@@ -6,8 +6,8 @@
  *          and the frames can be paused and resumed.
  * Input:   Use the left/right arrows(or buttons) to change the current
  *          frame.
- *          Use the spacebar(or button) to pause and resume the gif.
- *          Use e(or button) to power on and off the TV.
+ *          Use the pause/resume button to pause and resume the gif.
+ *          Use the on/off button to power on and off the TV.
  *          Use the IJKL keyset to manipulate the rotation of the room.
  */
 
@@ -30,21 +30,25 @@ var eye = vec3(0.2, 0.4, 1.0);
 var at = vec3(0.0, 0.0, 0.0);
 var up = vec3(0.0, 1.0, 0.0);
 
+// Determine orientation of room
 var theta = 0;
 var phi = 0;
 
-var woodImage, carpetImage, wallpaperImage, plasticImage;
-var woodTexture, carpetTexture, wallpaperTexture, plasticTexture;
+// Contains the links to the loaded images
+var woodImage, carpetImage, wallpaperImage, plasticImage, blackscreenImage;
 
+// Holds an array of links to loaded images(that are frames for the TV)
 var frames = [];
 var frameIndex = 0;
 var NUM_FRAMES = 7;
 
+// State variables
 var tvOn = true;
-
 var isPaused = false;
+
 var FRAMES_PER_SECOND = 1.0;
 
+// Holds the ID of the interval that changes the frame
 var intervalID;
 
 var texCoord = [
@@ -175,6 +179,7 @@ window.onload = function init() {
     carpetImage = document.getElementById("carpetImage");
     wallpaperImage = document.getElementById("wallpaperImage");
     plasticImage = document.getElementById("plasticImage");
+    blackscreenImage = document.getElementById("blackscreenImage");
 
     for(var i=0; i<NUM_FRAMES; i++)
     {
@@ -196,10 +201,6 @@ window.onload = function init() {
             prev();
         if (event.keyCode == 39 || event.keyCode == 68)    // right, d
             next();
-        if (event.keycode == 32)    // space
-            pause();
-        if (event.keycode == 69)    // e
-            power();
         if (event.keyCode == 74)    // j
         {
             theta -= 5;
@@ -238,6 +239,7 @@ function next()
 
 function pause()
 {
+    console.log("pause/resume");
     if (isPaused)
     {
         document.getElementById("ButtonPause").textContent = "Pause";
@@ -358,12 +360,14 @@ function tv()
     gl.drawArrays(gl.TRIANGLES, 0, numVertices);
 
     if (tvOn)
-        tvScreen(t);
+        configureTexture(frames[frameIndex]);   // Configure TV graphic
+    else
+        configureTexture(blackscreenImage);
+    tvScreen(t);
 }
 
 function tvScreen(mvm)
 {
-    configureTexture(frames[frameIndex]);   // Configure TV graphic
     mvm = mult(mvm, translate(0.0, 0.0, 0.01));     // Bring screen forward
     mvm = mult(mvm, rotate(180, 0.0, 0.0, 1.0));
     gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(mvm));
