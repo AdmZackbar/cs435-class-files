@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+<title>Zach Wassynger - CS 435 - Project #5</title>
+<style type="text/css">
+    canvas { background: blue; }
+</style>
+<script id="vertex-shader" type="x-shader/x-vertex">
+attribute vec4 vPosition;
+attribute vec4 vColor;
+attribute vec2 vTexCoord;
+
+varying vec4 fColor;
+varying vec2 fTexCoord;
+
+uniform mat4 projectionMatrix;
+uniform mat4 modelViewMatrix;
+
+void main() 
+{
+    fColor = vColor;
+    fTexCoord = vTexCoord;
+    gl_Position = projectionMatrix * modelViewMatrix * vPosition;
+} 
+</script>
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+precision mediump float;
+
+varying vec4 fColor;
+varying vec2 fTexCoord;
+
+uniform sampler2D texture;
+
+void main()
+{
+    gl_FragColor = fColor * texture2D(texture, fTexCoord);
+}
+</script>
+
+<script type="text/javascript" src="../Common/webgl-utils.js"></script>
+<script type="text/javascript" src="../Common/initShaders.js"></script>
+<script type="text/javascript" src="../Common/MV.js"></script>
+<script type="text/javascript" src="texmap.js"></script>
+
+</head>
+
+<body>
+<button id="ButtonPower">Turn off</button>
+<button id="ButtonPause">Pause</button>
+<button id="ButtonBack">Back</button>
+<button id="ButtonNext">Forward</button>
+<br>
+<canvas id="gl-canvas" width="512" height="512">
+Oops ... your browser doesn't support the HTML5 canvas element
+</canvas>
+<img id="woodImage" src="WoodTexture.jpg" hidden></img>
+<img id="carpetImage" src="CarpetTexture.jpg" hidden></img>
+<img id="wallpaperImage" src="WallpaperTexture.jpg" hidden></img>
+<img id="plasticImage" src="PlasticTexture.jpg" hidden></img>
+<img id="blackscreenImage" src="BlackScreenTexture.jpg" hidden></img>
+<img id="frame1" src="TVFrame1.jpg" hidden></img>
+<img id="frame2" src="TVFrame2.jpg" hidden></img>
+<img id="frame3" src="TVFrame3.jpg" hidden></img>
+<img id="frame4" src="TVFrame4.jpg" hidden></img>
+<img id="frame5" src="TVFrame5.jpg" hidden></img>
+<img id="frame6" src="TVFrame6.jpg" hidden></img>
+<img id="frame7" src="TVFrame7.jpg" hidden></img>
+</body>
+</html>
