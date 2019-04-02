@@ -1,13 +1,9 @@
 /*
- * File:    texmap.js
+ * File:    blending.js
  * Author:  Zach Wassynger
- * Purpose: Part of project 5 in CS 435. Creates a room with a table and TV
- *          that displays a series of frames. The TV can be turned on and off,
- *          and the frames can be paused and resumed.
- * Input:   Use the left/right arrows(or buttons) to change the current
- *          frame.
- *          Use the pause/resume button to pause and resume the gif.
- *          Use the on/off button to power on and off the TV.
+ * Purpose: Part of project 6 in CS 435.
+ * Input:   Use the WASD or arrow keys(or buttons) to manipulate the
+ *          location of the viewer.
  *          Use the IJKL keyset to manipulate the rotation of the room.
  */
 
@@ -26,27 +22,24 @@ var modelViewMatrixLoc;
 var projectionMatrixLoc;
 var textureLoc;
 
-var eye = vec3(0.3, 0.8, 0.0);
-var at = vec3(0.0, 0.0, -10.0);
-var up = vec3(0.0, 1.0, 0.0);
+var eye = vec3(0.0, 0.8, 8.0);
+var at = vec3(0.0, 0.0, 0.0);
+var UP = vec3(0.0, 1.0, 0.0);
+
+var fovy = 90.0;
+var near = -8.0;
+var far = 8.0;
+var aspect;
+
+// How much the camera shifts on command
+var CAM_DELTA = 0.1;
 
 // Determine orientation of room
 var theta = 0;
 var phi = 0;
 
 // Contains the links to the loaded images
-var woodImage, carpetImage, wallpaperImage, plasticImage, blackscreenImage;
-
-// Holds an array of links to loaded images(that are frames for the TV)
-var frames = [];
-var frameIndex = 0;
-var NUM_FRAMES = 7;
-
-// State variables
-var tvOn = true;
-var isPaused = false;
-
-var FRAMES_PER_SECOND = 1.0;
+var carpetImage, wallpaperImage;
 
 // Holds the ID of the interval that changes the frame
 var intervalID;
@@ -73,9 +66,6 @@ var WHITE = vec4(1.0, 1.0, 1.0, 1.0);
 
 var FLOOR_WIDTH = 12.0, FLOOR_HEIGHT = 0.2;
 var WALL_WIDTH = 1.0, WALL_HEIGHT = 5.0, WALL_LENGTH = 12.0;
-var TABLE_WIDTH = 4.0, TABLE_HEIGHT = 0.5;
-var TABLE_LEG_WIDTH = 0.5, TABLE_LEG_HEIGHT = 2.0;
-var TV_WIDTH = 3.5, TV_HEIGHT = 2.0, TV_LENGTH = 3.0;
 
 function configureTexture(image) {
     texture = gl.createTexture();
@@ -146,6 +136,8 @@ window.onload = function init() {
     gl.enable(gl.DEPTH_TEST);
 
     createCube();
+    
+    aspect = canvas.width/canvas.height;
 
     // Load shaders and initialize attribute buffers
     program = initShaders(gl, "vertex-shader", "fragment-shader");
@@ -175,97 +167,61 @@ window.onload = function init() {
     gl.vertexAttribPointer(vTexCoord, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(vTexCoord);
 
-    woodImage = document.getElementById("woodImage");
     carpetImage = document.getElementById("carpetImage");
     wallpaperImage = document.getElementById("wallpaperImage");
-    plasticImage = document.getElementById("plasticImage");
-    blackscreenImage = document.getElementById("blackscreenImage");
-
-    for(var i=0; i<NUM_FRAMES; i++)
-    {
-        frames[i] = document.getElementById("frame".concat(i+1))
-    }
 
     modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
     projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
     textureLoc = gl.getUniformLocation(program, "texture");
     
-    document.getElementById("ButtonBack").onclick = prev;
-    document.getElementById("ButtonNext").onclick = next;
-    document.getElementById("ButtonPower").onclick = power;
-    document.getElementById("ButtonPause").onclick = pause;
+    document.getElementById("ButtonLeft").onclick = left;
+    document.getElementById("ButtonRight").onclick = right;
+    document.getElementById("ButtonUp").onclick = up;
+    document.getElementById("ButtonDown").onclick = down;
 
     document.addEventListener("keydown", function(event)
     {
         if (event.keyCode == 37 || event.keyCode == 65)    // left, a
-            prev();
+            left();
         if (event.keyCode == 39 || event.keyCode == 68)    // right, d
-            next();
+            right();
+        if (event.keyCode == 38 || event.keyCode == 87)    // up, w
+            up();
+        if (event.keyCode == 40 || event.keyCode == 83)    // down, s
+            down();
         if (event.keyCode == 74)    // j
-        {
             theta -= 5;
-        }
         if (event.keyCode == 76)    // l
-        {
             theta += 5;
-        }
         if (event.keyCode == 73)    // i
-        {
             phi -= 5;
-        }
         if (event.keyCode == 75)    // k
-        {
             phi += 5;
-        }
+        render();
     })
 
-    projectionMatrix = ortho(-8, 8, -8, 8, -8, 8);
+    projectionMatrix = perspective(fovy, aspect, near, far);
     gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
-
-    intervalID = setInterval(updateFrame, 1000.0 / FRAMES_PER_SECOND);
 
     render();
 }
 
-function prev()
+function left()
 {
-    decrementFrame();
+    eye[0] -= CAM_DELTA;
+}
+function right()
+{
+    eye[0] += CAM_DELTA;
 }
 
-function next()
+function up()
 {
-    updateFrame();
+    eye[1] += CAM_DELTA;
 }
-
-function pause()
+function down()
 {
-    console.log("pause/resume");
-    if (isPaused)
-    {
-        document.getElementById("ButtonPause").textContent = "Pause";
-        intervalID = setInterval(updateFrame, 1000.0 / FRAMES_PER_SECOND);
-        isPaused = false;
-    }
-    else
-    {
-        document.getElementById("ButtonPause").textContent = "Resume";
-        clearInterval(intervalID);
-        isPaused = true;
-    }
-}
-
-function power()
-{
-    if (tvOn)
-    {
-        document.getElementById("ButtonPower").textContent = "Turn on";
-        tvOn = false;
-    }
-    else
-    {
-        document.getElementById("ButtonPower").textContent = "Turn off";
-        tvOn = true;
-    }
+    eye[1] -= CAM_DELTA;
 }
 
 function floor()
@@ -304,92 +260,10 @@ function wall(mvm)
     gl.drawArrays(gl.TRIANGLES, 0, numVertices);
 }
 
-function table()
-{
-    configureTexture(woodImage);
-
-    legs();
-
-    modelViewMatrix = mult(modelViewMatrix, translate(0, TABLE_LEG_HEIGHT, 0))
-    tabletop();
-}
-
-function legs()
-{
-    var instanceMatrix = mult(modelViewMatrix, translate(TABLE_LEG_WIDTH/2-TABLE_WIDTH/2, 0, TABLE_LEG_WIDTH/2-TABLE_WIDTH/2));
-    leg(instanceMatrix);
-
-    instanceMatrix = mult(modelViewMatrix, translate(TABLE_WIDTH/2-TABLE_LEG_WIDTH/2, 0, TABLE_LEG_WIDTH/2-TABLE_WIDTH/2));
-    leg(instanceMatrix);
-    
-    instanceMatrix = mult(modelViewMatrix, translate(TABLE_LEG_WIDTH/2-TABLE_WIDTH/2, 0, TABLE_WIDTH/2-TABLE_LEG_WIDTH/2));
-    leg(instanceMatrix);
-
-    instanceMatrix = mult(modelViewMatrix, translate(TABLE_WIDTH/2-TABLE_LEG_WIDTH/2, 0, TABLE_WIDTH/2-TABLE_LEG_WIDTH/2));
-    leg(instanceMatrix);
-}
-
-function leg(mvm)
-{
-    var s = scale4(TABLE_LEG_WIDTH, TABLE_LEG_HEIGHT, TABLE_LEG_WIDTH);
-    var instanceMatrix = mult(translate(0.0, 0.5 * TABLE_LEG_HEIGHT, 0.0), s);
-    var t = mult(mvm, instanceMatrix);
-
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
-    gl.drawArrays(gl.TRIANGLES, 0, numVertices);
-}
-
-function tabletop()
-{
-    var s = scale4(TABLE_WIDTH, TABLE_HEIGHT, TABLE_WIDTH);
-    var instanceMatrix = mult(translate(0.0, 0.5 * TABLE_HEIGHT, 0.0), s);
-    var t = mult(modelViewMatrix, instanceMatrix);
-
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
-    gl.drawArrays(gl.TRIANGLES, 0, numVertices);
-}
-
-function tv()
-{
-    configureTexture(plasticImage);
-    var s = scale4(TV_WIDTH, TV_HEIGHT, TV_LENGTH);
-    var instanceMatrix = mult(translate(0.0, 0.5 * TV_HEIGHT, 0.0), s);
-    var t = mult(modelViewMatrix, instanceMatrix);
-
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
-    gl.drawArrays(gl.TRIANGLES, 0, numVertices);
-
-    if (tvOn)
-        configureTexture(frames[frameIndex]);   // Configure TV graphic
-    else
-        configureTexture(blackscreenImage);
-    tvScreen(t);
-}
-
-function tvScreen(mvm)
-{
-    mvm = mult(mvm, translate(0.0, 0.0, 0.01));     // Bring screen forward
-    mvm = mult(mvm, rotate(180, 0.0, 0.0, 1.0));
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(mvm));
-    gl.drawArrays(gl.TRIANGLES, 0, 6);          // Draw ONLY the front face
-}
-
-function updateFrame()
-{
-    frameIndex++;
-    if (frameIndex >= NUM_FRAMES) frameIndex = 0;
-}
-
-function decrementFrame()
-{
-    frameIndex--;
-    if (frameIndex < 0) frameIndex = (NUM_FRAMES-1);
-}
-
 var render = function(){
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     
-    modelViewMatrix = lookAt(eye, at, up);
+    modelViewMatrix = lookAt(eye, at, UP);
     modelViewMatrix = mult(modelViewMatrix, rotate(theta, 0, 1, 0));
     modelViewMatrix = mult(modelViewMatrix, rotate(phi, 1, 0, 0));
 
@@ -398,6 +272,4 @@ var render = function(){
 
     modelViewMatrix = mult(modelViewMatrix, translate(0, FLOOR_HEIGHT/2, 0));
     walls();
-
-    requestAnimationFrame(render);
 }
