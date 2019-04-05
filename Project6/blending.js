@@ -1,7 +1,9 @@
 /*
  * File:    blending.js
  * Author:  Zach Wassynger
- * Purpose: Part of project 6 in CS 435.
+ * Purpose: Part of project 6 in CS 435. Creates a room with 3 walls and a floor. One of the walls
+ *          has a window, which faces a landscape. The viewer can move around the back of the room
+ *          to see different parts of the landscape through the window.
  * Input:   Use the WASD or arrow keys(or buttons) to manipulate the
  *          location of the viewer.
  *          Use the IJKL keyset to manipulate the rotation of the room.
@@ -39,7 +41,7 @@ var theta = 0;
 var phi = 0;
 
 // Contains the links to the loaded images
-var carpetImage, wallpaperImage;
+var carpetImage, wallpaperImage, windowImage, landscapeImage;
 
 // Holds the ID of the interval that changes the frame
 var intervalID;
@@ -64,17 +66,31 @@ var vertices = [
 
 var WHITE = vec4(1.0, 1.0, 1.0, 1.0);
 
-var FLOOR_WIDTH = 12.0, FLOOR_HEIGHT = 0.2;
-var WALL_WIDTH = 1.0, WALL_HEIGHT = 5.0, WALL_LENGTH = 12.0;
+var FLOOR_WIDTH = 16.0, FLOOR_HEIGHT = 0.2;
+var WALL_WIDTH = 1.0, WALL_HEIGHT = 10.0, WALL_LENGTH = FLOOR_WIDTH;
+var WINDOW_WIDTH = WALL_LENGTH/2, WINDOW_HEIGHT = WALL_HEIGHT/2;
+var BACKGROUND_DIST = 12.0, BACKGROUND_HEIGHT = 1.0, BACKGROUND_WIDTH = 14.0, BACKGROUND_HEIGHT = 9.0, BACKGROUND_DEPTH = 1.0;
+
+function isPowerOf2(value)
+{
+    return (value & (value - 1)) == 0;
+}
 
 function configureTexture(image) {
     texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    if (isPowerOf2(image.width) && isPowerOf2(image.height))
+        gl.generateMipmap(gl.TEXTURE_2D);
+    else
+    {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
+    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
     gl.uniform1i(textureLoc, texture);
 }
@@ -133,8 +149,10 @@ window.onload = function init() {
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(1.0, 1.0, 1.0, 1.0);
     
-    gl.enable(gl.DEPTH_TEST);
-
+    //gl.enable(gl.DEPTH_TEST);
+    //gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     createCube();
     
     aspect = canvas.width/canvas.height;
@@ -169,6 +187,8 @@ window.onload = function init() {
 
     carpetImage = document.getElementById("carpetImage");
     wallpaperImage = document.getElementById("wallpaperImage");
+    windowImage = document.getElementById("windowImage");
+    landscapeImage = document.getElementById("landscapeImage");
 
     modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
     projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
@@ -181,26 +201,44 @@ window.onload = function init() {
 
     document.addEventListener("keydown", function(event)
     {
-        if (event.keyCode == 37 || event.keyCode == 65)    // left, a
-            left();
-        if (event.keyCode == 39 || event.keyCode == 68)    // right, d
-            right();
-        if (event.keyCode == 38 || event.keyCode == 87)    // up, w
-            up();
-        if (event.keyCode == 40 || event.keyCode == 83)    // down, s
-            down();
-        if (event.keyCode == 74)    // j
-            theta -= 5;
-        if (event.keyCode == 76)    // l
-            theta += 5;
-        if (event.keyCode == 73)    // i
-            phi -= 5;
-        if (event.keyCode == 75)    // k
-            phi += 5;
+        switch(event.keyCode)
+        {
+            case 37:    // left
+            case 65:    // a
+                left();
+                return;
+            case 39:    // right
+            case 68:    // d
+                right();
+                return;
+            case 38:    // up
+            case 87:    // w
+                up();
+                return;
+            case 40:    // down
+            case 83:    // s
+                down();
+                return;
+            case 74:    // j
+                theta -= 5;
+                break;
+            case 76:    // l
+                theta += 5;
+                break;
+            case 73:    // i
+                phi -= 5;
+                break;
+            case 75:    // k
+                phi += 5;
+                break;
+            default:
+                break;
+        }
         render();
     })
 
     projectionMatrix = perspective(fovy, aspect, near, far);
+    //projectionMatrix = ortho(-10, 10, -10, 10, -20, 20);
     gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
 
     render();
@@ -209,45 +247,60 @@ window.onload = function init() {
 function left()
 {
     eye[0] -= CAM_DELTA;
+    if (eye[0] < -FLOOR_WIDTH/2+0.05)
+        eye[0] = -FLOOR_WIDTH/2+0.05;
+    render();
 }
 function right()
 {
     eye[0] += CAM_DELTA;
+    if (eye[0] > FLOOR_WIDTH/2-0.05)
+        eye[0] = FLOOR_WIDTH/2-0.05;
+    render();
 }
 
 function up()
 {
     eye[1] += CAM_DELTA;
+    if (eye[1] > WALL_HEIGHT/2+2.1)
+        eye[1] = WALL_HEIGHT/2+2.1;
+    render();
 }
 function down()
 {
     eye[1] -= CAM_DELTA;
+    if (eye[1] < -2.5)
+        eye[1] = -2.5;
+    render();
 }
 
-function floor()
+function floor(matrix)
 {
     var s = scale4(FLOOR_WIDTH, FLOOR_HEIGHT, FLOOR_WIDTH);
     var instanceMatrix = mult(translate(0.0, 0.5 * FLOOR_HEIGHT, 0.0), s);
-    var t = mult(modelViewMatrix, instanceMatrix);
+    var t = mult(matrix, instanceMatrix);
 
     gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
     configureTexture(carpetImage);
     gl.drawArrays(gl.TRIANGLES, 0, numVertices);
 }
 
-function walls()
+function walls(matrix)
 {
     configureTexture(wallpaperImage);
     
-    var instanceMatrix = mult(modelViewMatrix, translate(WALL_WIDTH/2-FLOOR_WIDTH/2, 0, 0));
+    var instanceMatrix = mult(matrix, translate(-FLOOR_WIDTH/2-WALL_WIDTH/2, 0, 0));
     wall(instanceMatrix);
 
-    instanceMatrix = mult(modelViewMatrix, translate(FLOOR_WIDTH/2-WALL_WIDTH/2, 0, 0));
+    instanceMatrix = mult(matrix, translate(FLOOR_WIDTH/2-WALL_WIDTH/2, 0, 0));
     wall(instanceMatrix);
 
-    instanceMatrix = mult(modelViewMatrix, translate(0, 0, WALL_WIDTH/2-FLOOR_WIDTH/2));
+    configureTexture(windowImage);
+    instanceMatrix = mult(matrix, translate(0, 0, WALL_WIDTH/2-FLOOR_WIDTH/2));
     instanceMatrix = mult(instanceMatrix, rotate(90, 0, 1, 0));
     wall(instanceMatrix);
+    //instanceMatrix = mult(instanceMatrix, translate(0, (WALL_HEIGHT - WINDOW_HEIGHT)/2, 0));
+    //wallWindow(instanceMatrix);
 }
 
 function wall(mvm)
@@ -257,7 +310,31 @@ function wall(mvm)
     var t = mult(mvm, instanceMatrix);
 
     gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
-    gl.drawArrays(gl.TRIANGLES, 0, numVertices);
+    gl.drawArrays(gl.TRIANGLES, 6, 6);
+}
+
+function wallWindow(mvm)
+{
+    configureTexture(windowImage);
+
+    var s = scale4(1, WINDOW_HEIGHT, WINDOW_WIDTH);
+    var instanceMatrix = mult(translate(0.0, 0.5 * WINDOW_HEIGHT, 0.0), s);
+    var t = mult(mvm, instanceMatrix);
+
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+    gl.drawArrays(gl.TRIANGLES, 6, 6);
+}
+
+function background(matrix)
+{
+    configureTexture(landscapeImage);
+    var s = scale4(BACKGROUND_WIDTH, BACKGROUND_HEIGHT, BACKGROUND_DEPTH);
+    var instanceMatrix = mult(translate(0.0, 0.5 * BACKGROUND_HEIGHT, 0.0), s);
+    var t = mult(matrix, instanceMatrix);
+    t = mult(t, rotate(180, 0, 0, 1));
+
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(t));
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 
 var render = function(){
@@ -267,9 +344,14 @@ var render = function(){
     modelViewMatrix = mult(modelViewMatrix, rotate(theta, 0, 1, 0));
     modelViewMatrix = mult(modelViewMatrix, rotate(phi, 1, 0, 0));
 
-    modelViewMatrix = mult(modelViewMatrix, translate(0, -3, 0))
-    floor();
+    var floorMatrix = mult(modelViewMatrix, translate(0, -3, 0))
+    //floor();
 
-    modelViewMatrix = mult(modelViewMatrix, translate(0, FLOOR_HEIGHT/2, 0));
-    walls();
+    var wallMatrix = mult(floorMatrix, translate(0, FLOOR_HEIGHT/2, 0));
+    //walls();
+
+    var backgroundMatrix = mult(wallMatrix, translate(0, 1, -BACKGROUND_DIST));
+    background(backgroundMatrix);
+    walls(wallMatrix);
+    floor(floorMatrix);
 }

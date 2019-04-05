@@ -35,7 +35,10 @@ uniform sampler2D texture;
 
 void main()
 {
-    gl_FragColor = fColor * texture2D(texture, fTexCoord);
+    vec4 texColor = texture2D(texture, fTexCoord);
+    gl_FragColor = fColor * texColor;
+    if (texColor.a < 0.0)
+        gl_FragColor.a = 0.0;
 }
 </script>
 
@@ -57,5 +60,7 @@ Oops ... your browser doesn't support the HTML5 canvas element
 </canvas>
 <img id="carpetImage" src="CarpetTexture.jpg" hidden></img>
 <img id="wallpaperImage" src="WallpaperTexture.jpg" hidden></img>
+<img id="windowImage" src="WallWindowTexture.png" hidden></img>
+<img id="landscapeImage" src="LandscapeTexture.jpg" hidden></img>
 </body>
 </html>
