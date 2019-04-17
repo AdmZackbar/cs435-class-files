@@ -12,8 +12,6 @@ var uniforms = {};
 var fovy = 60.0;
 var aspect;
 
-var modelViewMatrix;
-
 // Light shader struct info
 var MAX_LIGHTS = 3;
 var LIGHT_FIELDS = [
@@ -37,6 +35,23 @@ var LIGHT_DELTA = 0.1;
 
 var cameraPosition = vec3(1.0, 1.0, 1.0);
 var CAMERA_DELTA = 0.1;
+
+// Identity matrix for base transform
+var identityMatrix = [
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]
+];
+
+// Transform for model view matrices
+function scale4(a, b, c) {
+    var result = mat4();
+    result[0][0] = a;
+    result[1][1] = b;
+    result[2][2] = c;
+    return result;
+}
 
 window.onload = function()
 {
@@ -239,7 +254,8 @@ function setUniforms(program)
 {
     uniformNames = [
         "projectionMatrix",
-        "modelViewMatrix",
+        "modelMatrix",
+        "viewMatrix",
         "viewPosition"
     ];
 
@@ -268,8 +284,8 @@ function render()
 {
     var at = vec3(0.0, 0.0, 0.0);
     var up = vec3(0.0, 1.0, 0.0);
-    modelViewMatrix = lookAt(cameraPosition, at, up);
-    gl.uniformMatrix4fv(uniforms["modelViewMatrix"], false, flatten(modelViewMatrix));
+    var viewMatrix = lookAt(cameraPosition, at, up);
+    gl.uniformMatrix4fv(uniforms["viewMatrix"], false, flatten(viewMatrix));
     gl.uniform3fv(uniforms["viewPosition"], cameraPosition);
 
     var lightPos2 = vec4(-1.0, -1.0, -1.0, 0.0);
@@ -307,6 +323,13 @@ function render()
     gl.uniform4fv(uniforms["material.ambient"], flatten(ambient));
     gl.uniform4fv(uniforms["material.diffuse"], flatten(diffuse));
     gl.uniform4fv(uniforms["material.specular"], flatten(specular));
+
+    var modelMatrix = identityMatrix;
+    gl.uniformMatrix4fv(uniforms["modelMatrix"], false, flatten(modelMatrix));
+    gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
+
+    modelMatrix = translate(-1.0, 0.0, 0.0);
+    gl.uniformMatrix4fv(uniforms["modelMatrix"], false, flatten(modelMatrix));
 
     gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
 }
