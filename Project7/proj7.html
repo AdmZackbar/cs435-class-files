@@ -12,6 +12,7 @@
         attribute vec3 vNormal;
 
         uniform mat4 projectionMatrix, modelViewMatrix;
+        uniform vec3 viewPosition;
         uniform struct Light
         {
             vec4 position;
@@ -28,8 +29,6 @@
         
         void main()
         {
-            vec3 viewPosition = vec3(1.0, 1.0, 1.0);
-
             normal = vNormal;
             surfaceToView = viewPosition - vPosition.xyz;
             for (int i=0; i<MAX_LIGHTS; i++)

@@ -29,6 +29,9 @@ var LIGHT_FIELDS = [
 var lightPosition = vec4(0.0, 1.0, 0.0, 1.0);
 var LIGHT_DELTA = 0.1;
 
+var cameraPosition = vec3(1.0, 1.0, 1.0);
+var CAMERA_DELTA = 0.1;
+
 window.onload = function()
 {
     canvas = document.getElementById("gl-canvas");
@@ -88,6 +91,18 @@ function setupInput()
             case 69:    // e
                 near();
                 break;
+            case 73:    // i
+                forward();
+                break;
+            case 75:    // k
+                backward();
+                break;
+            case 74:    // j
+                moveLeft();
+                break;
+            case 76:    // l
+                moveRight();
+                break;
             default:
                 return;
         }
@@ -118,6 +133,23 @@ function near()
 function far()
 {
     lightPosition[2] -= LIGHT_DELTA;
+}
+
+function forward()
+{
+    cameraPosition[2] -= LIGHT_DELTA;
+}
+function backward()
+{
+    cameraPosition[2] += LIGHT_DELTA;
+}
+function moveLeft()
+{
+    cameraPosition[0] -= LIGHT_DELTA;
+}
+function moveRight()
+{
+    cameraPosition[0] += LIGHT_DELTA;
 }
 
 function createGeometry()
@@ -188,6 +220,7 @@ function setUniforms(program)
     uniformNames = [
         "projectionMatrix",
         "modelViewMatrix",
+        "viewPosition"
     ];
 
     // Add lights array with its fields
@@ -207,11 +240,11 @@ function setUniforms(program)
 
 function render()
 {
-    var eye = vec3(1.0, 1.0, 1.0);
     var at = vec3(0.0, 0.0, 0.0);
     var up = vec3(0.0, 1.0, 0.0);
-    modelViewMatrix = lookAt(eye, at, up);
+    modelViewMatrix = lookAt(cameraPosition, at, up);
     gl.uniformMatrix4fv(uniforms["modelViewMatrix"], false, flatten(modelViewMatrix));
+    gl.uniform3fv(uniforms["viewPosition"], cameraPosition);
 
     var lightPos2 = vec4(1.0, 1.0, 1.0, 1.0);
     var lightPos3 = vec4(0.0, 0.0, 2.0, 1.0);
