@@ -12,12 +12,32 @@ var uniforms = {};
 var fovy = 60.0;
 var aspect;
 
+var modelViewMatrix;
+
+// Light shader struct info
+var MAX_LIGHTS = 3;
+var LIGHT_FIELDS = [
+    "position",
+    "isActive",
+    "ambient",
+    "diffuse",
+    "specular",
+    "shininess",
+    "attenuationCoef"
+];
+
+var lightPosition = vec4(0.0, 1.0, 0.0, 1.0);
+var LIGHT_DELTA = 0.1;
+
 window.onload = function()
 {
     canvas = document.getElementById("gl-canvas");
     gl = WebGLUtils.setupWebGL(canvas);
     if (!gl)
         alert("WebGL is not available");
+    
+    // Set up keyboard input
+    setupInput();
     
     // Set up gl instance
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -38,6 +58,66 @@ window.onload = function()
     gl.uniformMatrix4fv(uniforms["projectionMatrix"], false, flatten(projectionMatrix));
 
     render();
+}
+
+function setupInput()
+{
+    document.addEventListener("keydown", function(event)
+    {
+        switch(event.keyCode)
+        {
+            case 37:    // left
+            case 65:    // a
+                left();
+                break;;
+            case 39:    // right
+            case 68:    // d
+                right();
+                break;
+            case 38:    // up
+            case 87:    // w
+                up();
+                break;
+            case 40:    // down
+            case 83:    // s
+                down();
+                break;
+            case 81:    // q
+                far();
+                break;
+            case 69:    // e
+                near();
+                break;
+            default:
+                return;
+        }
+        render();
+    })
+}
+
+function left()
+{
+    lightPosition[0] -= LIGHT_DELTA;
+}
+function right()
+{
+    lightPosition[0] += LIGHT_DELTA;
+}
+function up()
+{
+    lightPosition[1] += LIGHT_DELTA;
+}
+function down()
+{
+    lightPosition[1] -= LIGHT_DELTA;
+}
+function near()
+{
+    lightPosition[2] += LIGHT_DELTA;
+}
+function far()
+{
+    lightPosition[2] -= LIGHT_DELTA;
 }
 
 function createGeometry()
@@ -64,7 +144,7 @@ function createGeometry()
 
         var t1 = subtract(cubePoints[c], cubePoints[b]);
         var t2 = subtract(cubePoints[b], cubePoints[a]);
-        var normal = vec3(cross(t2, t1));
+        var normal = vec3(cross(t1, t2));
         for (var i = 0; i < 6; i++)
         {
             cubeNormals.push(normal);
@@ -105,10 +185,61 @@ function createVertexBuffer(program, points)
 
 function setUniforms(program)
 {
-    uniforms["projectionMatrix"] = gl.getUniformLocation(program, "projectionMatrix");
+    uniformNames = [
+        "projectionMatrix",
+        "modelViewMatrix",
+    ];
+
+    // Add lights array with its fields
+    for (var i = 0; i < MAX_LIGHTS; i++)
+    {
+        var lightName = "lights[" + i + "].";
+        for (var j = 0; j < LIGHT_FIELDS.length; j++)
+        {
+            uniformNames.push(lightName + LIGHT_FIELDS[j]);
+        }
+    }
+    
+    uniformNames.forEach(function (name) {
+        uniforms[name] = gl.getUniformLocation(program, name);
+    });
 }
 
 function render()
 {
+    var eye = vec3(1.0, 1.0, 1.0);
+    var at = vec3(0.0, 0.0, 0.0);
+    var up = vec3(0.0, 1.0, 0.0);
+    modelViewMatrix = lookAt(eye, at, up);
+    gl.uniformMatrix4fv(uniforms["modelViewMatrix"], false, flatten(modelViewMatrix));
+
+    var lightPos2 = vec4(1.0, 1.0, 1.0, 1.0);
+    var lightPos3 = vec4(0.0, 0.0, 2.0, 1.0);
+    gl.uniform4fv(uniforms["lights[0].position"], flatten(lightPosition));
+    gl.uniform4fv(uniforms["lights[1].position"], flatten(lightPos2));
+    gl.uniform4fv(uniforms["lights[2].position"], flatten(lightPos3));
+
+    var attenuationCoef = 0.5;
+    var ambient = vec4(0.1, 0.1, 0.2, 1.0);
+    var diffuse = vec4(0.5, 0.5, 0.6, 1.0);
+    var specular = vec4(0.8, 0.8, 0.8, 1.0);
+    var shininess = 100.0;
+
+    var activeLights = [
+        true,
+        false,
+        false
+    ];
+
+    for (var i = 0; i < 3; i++)
+    {
+        gl.uniform1i(uniforms["lights[" + i + "].isActive"], activeLights[i]);
+        gl.uniform4fv(uniforms["lights[" + i + "].ambient"], flatten(ambient));
+        gl.uniform4fv(uniforms["lights[" + i + "].diffuse"], flatten(diffuse));
+        gl.uniform4fv(uniforms["lights[" + i + "].specular"], flatten(specular));
+        gl.uniform1f(uniforms["lights[" + i + "].attenuationCoef"], attenuationCoef);
+        gl.uniform1f(uniforms["lights[" + i + "].shininess"], shininess);
+    }
+
     gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
 }
