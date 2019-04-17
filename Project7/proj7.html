@@ -54,29 +54,46 @@
             float shininess;
             float attenuationCoef;
         } lights[MAX_LIGHTS];
+        uniform struct Material
+        {
+            vec4 ambient;
+            vec4 diffuse;
+            vec4 specular;
+        } material;
 
         varying vec3 normal, surfaceToView;
         varying vec3 surfaceToLight[MAX_LIGHTS];
 
         vec4 applyLight(Light light, vec3 normal, vec3 surfaceToView, vec3 surfaceToLight)
         {
-            float distanceToLight = length(surfaceToLight);
-            float attenuation = 1.0 / (1.0 + light.attenuationCoef*distanceToLight*distanceToLight);
+            float attenuation;
+            vec3 surfaceToLightDir;
+
+            if (light.position.w == 0.0)    // Directional light
+            {
+                surfaceToLightDir = normalize(light.position.xyz);
+                attenuation = 1.0;
+            } else
+            {
+                float distanceToLight = length(surfaceToLight);
+                attenuation = 1.0 / (1.0 + light.attenuationCoef*distanceToLight*distanceToLight);
+
+                surfaceToLightDir = normalize(surfaceToLight);
+            }
             
-            vec3 surfaceToLightDir = normalize(surfaceToLight);
             vec3 halfVector = normalize(surfaceToLightDir + surfaceToView);
 
             float Kd = dot(surfaceToLightDir, normal);
-            vec4 diffuse = max(Kd, 0.0) * light.diffuse;
+            vec4 diffuse = max(Kd, 0.0) * light.diffuse * material.diffuse;
 
             float Ks = pow(max(dot(normal, halfVector), 0.0), light.shininess);
-            vec4 specular = Ks * light.specular;
+            vec4 specular = Ks * light.specular * material.specular;
             
             if(Kd < 0.0) {
                 specular = vec4(0.0, 0.0, 0.0, 1.0);
             }
 
-            return light.ambient + attenuation*(diffuse + specular);
+            return (light.ambient*material.ambient) + attenuation*(diffuse + specular);
         }
 
         void main()

@@ -25,6 +25,12 @@ var LIGHT_FIELDS = [
     "shininess",
     "attenuationCoef"
 ];
+// Material shader struct info
+var MATERIAL_FIELDS = [
+    "ambient",
+    "diffuse",
+    "specular"
+];
 
 var lightPosition = vec4(0.0, 1.0, 0.0, 1.0);
 var LIGHT_DELTA = 0.1;
@@ -92,16 +98,22 @@ function setupInput()
                 near();
                 break;
             case 73:    // i
-                forward();
+                cameraUp();
                 break;
             case 75:    // k
-                backward();
+                cameraDown();
                 break;
             case 74:    // j
                 moveLeft();
                 break;
             case 76:    // l
                 moveRight();
+                break;
+            case 85:    // u
+                forward();
+                break;
+            case 79:    // o
+                backward();
                 break;
             default:
                 return;
@@ -150,6 +162,14 @@ function moveLeft()
 function moveRight()
 {
     cameraPosition[0] += LIGHT_DELTA;
+}
+function cameraUp()
+{
+    cameraPosition[1] += LIGHT_DELTA;
+}
+function cameraDown()
+{
+    cameraPosition[1] -= LIGHT_DELTA;
 }
 
 function createGeometry()
@@ -232,6 +252,12 @@ function setUniforms(program)
             uniformNames.push(lightName + LIGHT_FIELDS[j]);
         }
     }
+
+    // Add material fields
+    for (var i = 0; i < MATERIAL_FIELDS.length; i++)
+    {
+        uniformNames.push("material." + MATERIAL_FIELDS[i]);
+    }
     
     uniformNames.forEach(function (name) {
         uniforms[name] = gl.getUniformLocation(program, name);
@@ -246,7 +272,7 @@ function render()
     gl.uniformMatrix4fv(uniforms["modelViewMatrix"], false, flatten(modelViewMatrix));
     gl.uniform3fv(uniforms["viewPosition"], cameraPosition);
 
-    var lightPos2 = vec4(1.0, 1.0, 1.0, 1.0);
+    var lightPos2 = vec4(-1.0, -1.0, -1.0, 0.0);
     var lightPos3 = vec4(0.0, 0.0, 2.0, 1.0);
     gl.uniform4fv(uniforms["lights[0].position"], flatten(lightPosition));
     gl.uniform4fv(uniforms["lights[1].position"], flatten(lightPos2));
@@ -254,14 +280,14 @@ function render()
 
     var attenuationCoef = 0.5;
     var ambient = vec4(0.1, 0.1, 0.2, 1.0);
-    var diffuse = vec4(0.5, 0.5, 0.6, 1.0);
-    var specular = vec4(0.8, 0.8, 0.8, 1.0);
+    var diffuse = vec4(0.6, 0.6, 0.7, 1.0);
+    var specular = vec4(0.9, 0.9, 0.95, 1.0);
     var shininess = 100.0;
 
     var activeLights = [
         true,
-        false,
-        false
+        true,
+        true
     ];
 
     for (var i = 0; i < 3; i++)
@@ -273,6 +299,14 @@ function render()
         gl.uniform1f(uniforms["lights[" + i + "].attenuationCoef"], attenuationCoef);
         gl.uniform1f(uniforms["lights[" + i + "].shininess"], shininess);
     }
+
+    ambient = vec4(0.5, 0.5, 0.55, 1.0);
+    diffuse = vec4(0.8, 0.8, 0.85, 1.0);
+    specular = vec4(1.0, 1.0, 1.0, 1.0);
+
+    gl.uniform4fv(uniforms["material.ambient"], flatten(ambient));
+    gl.uniform4fv(uniforms["material.diffuse"], flatten(diffuse));
+    gl.uniform4fv(uniforms["material.specular"], flatten(specular));
 
     gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
 }
