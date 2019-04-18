@@ -53,6 +53,13 @@ function scale4(a, b, c) {
     return result;
 }
 
+var isPaused = false;
+// Counter for the number of frames during the most recent second
+var numFrames = 0;
+// Multipler for how often the FPS counter updates
+var FPS_REFRESH_RATE = 0.5;
+var frameCounterID;
+
 window.onload = function()
 {
     canvas = document.getElementById("gl-canvas");
@@ -67,6 +74,8 @@ window.onload = function()
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0.1, 0.1, 0.1, 1.0);
     gl.enable(gl.DEPTH_TEST);
+    //gl.enable(gl.BLEND);
+    //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     // Set up shaders
     var program = initShaders(gl, "vertex-shader", "fragment-shader");
@@ -74,12 +83,10 @@ window.onload = function()
 
     createGeometry();
     createBuffers(program);
-
     setUniforms(program);
+    setProjection();
 
-    aspect = canvas.width/canvas.height;
-    var projectionMatrix = perspective(fovy, aspect, 0.1, 10);
-    gl.uniformMatrix4fv(uniforms["projectionMatrix"], false, flatten(projectionMatrix));
+    frameCounterID = setInterval(updateFPS, 1000.0 * FPS_REFRESH_RATE);
 
     render();
 }
@@ -130,10 +137,13 @@ function setupInput()
             case 79:    // o
                 backward();
                 break;
+            case 32:    // space
+                pause();
+                break;
             default:
                 return;
         }
-        render();
+        //render();
     })
 }
 
@@ -185,6 +195,21 @@ function cameraUp()
 function cameraDown()
 {
     cameraPosition[1] -= LIGHT_DELTA;
+}
+
+function pause()
+{
+    if (isPaused)
+        render();
+    isPaused = !isPaused;
+}
+
+function updateFPS()
+{
+    var fps = numFrames / FPS_REFRESH_RATE;
+    console.log(fps);
+
+    numFrames = 0;
 }
 
 function createGeometry()
@@ -280,6 +305,13 @@ function setUniforms(program)
     });
 }
 
+function setProjection()
+{
+    aspect = canvas.width/canvas.height;
+    var projectionMatrix = perspective(fovy, aspect, 0.1, 10);
+    gl.uniformMatrix4fv(uniforms["projectionMatrix"], false, flatten(projectionMatrix));
+}
+
 function render()
 {
     var at = vec3(0.0, 0.0, 0.0);
@@ -332,4 +364,8 @@ function render()
     gl.uniformMatrix4fv(uniforms["modelMatrix"], false, flatten(modelMatrix));
 
     gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
+
+    numFrames++;
+    if (!isPaused)
+        requestAnimationFrame(render);
 }
