@@ -49,13 +49,13 @@ function Material(ambient, diffuse, specular, shininess, textureName)
     this.textureName = textureName;
 }
 // Contains info about each "block"
-function Block(material, x, y, z)
+function Block(materialName, x, y, z)
 {
-    this.material = material;
+    this.material = MATERIALS[materialName];
     this.position = vec3(x, y, z);
 }
 // Contains info about each light source
-function Light(ambient, diffuse, specular, attenuationCoef, x, y, z, isPoint = true)
+function Light(ambient, diffuse, specular, attenuationCoef, x, y, z, isPoint=true, isActive=true)
 {
     this.ambient = ambient;
     this.diffuse = diffuse;
@@ -65,41 +65,55 @@ function Light(ambient, diffuse, specular, attenuationCoef, x, y, z, isPoint = t
         this.position = vec4(x, y, z, 1.0);
     else
         this.position = vec4(x, y, z, 0.0);
+    // Determines if the light information needs to be pushed
+    this.fresh = true;
+    // Determines if the light is used
+    this.isActive = isActive;
 }
 
 // Available materials
 var MATERIALS = {
     "cobblestone": new Material(
-        vec4(0.5, 0.5, 0.55, 1.0),
-        vec4(0.8, 0.8, 0.85, 1.0),
-        vec4(1.0, 1.0, 1.0, 1.0),
-        10.0,
-        "cobblestone"
-    ),
-    "cobblestone2": new Material(
-        vec4(0.5, 0.5, 0.70, 1.0),
-        vec4(0.8, 0.8, 0.95, 1.0),
-        vec4(1.0, 1.0, 1.0, 1.0),
+        vec4(0.8, 0.8, 0.8, 1.0),
+        vec4(0.8, 0.8, 0.8, 1.0),
+        vec4(0.9, 0.9, 0.9, 1.0),
         10.0,
         "cobblestone"
     )
 }
 
 // Contains all the "blocks" in the world
-var blocks = [
-    new Block(MATERIALS["cobblestone"], 0.0, 0.0, 0.0),
-    new Block(MATERIALS["cobblestone2"], -1.0, 0.0, 0.0)
-];
+var blocks = [];
 // Contains all the lights in the world
 var lights = [];
 // Stores the most recently used material
 var recentMaterial;
 
-var lightPosition = vec4(0.0, 1.0, 0.0, 1.0);
-var LIGHT_DELTA = 0.1;
+// Stores all the player-related info
+var player = {
+    "position": vec3(0.0, 0.0, 0.0),
+    "lookAt": vec3(0.0, 0.0, -1.0),
+    "velocity": vec3(0.0, 0.0, 0.0)
+}
+
+// Controls how often the world is updated(in hz)
+var TICKRATE = 60;
+var updaterID;
+
+var atPosition = vec3(0.0, 0.0, 0.0);
+var AT_DELTA = 0.1;
 
 var cameraPosition = vec3(1.0, 1.0, 1.0);
 var CAMERA_DELTA = 0.1;
+
+var RENDER_DISTANCE = 30;
+
+var WORLD_WIDTH = 31;
+var WORLD_DEPTH = 31;
+// Amount of time in a full "day"(in ticks)
+var WORLD_DAY_CYCLE = 10.0*TICKRATE;
+var tickCounter = 0;
+var dayCounter = 0;
 
 // Transform for model view matrices
 function scale4(a, b, c) {
@@ -144,7 +158,10 @@ window.onload = function()
     setProjection();
     loadTextures(program);
 
-    frameCounterID = setInterval(updateFPS, 1000.0 * FPS_REFRESH_RATE);
+    generateWorld();
+
+    frameCounterID = setInterval(updateFPS, 1000.0*FPS_REFRESH_RATE);
+    updaterID = setInterval(updateWorld, 1000.0/TICKRATE);
 
     render();
 }
@@ -207,27 +224,27 @@ function setupInput()
 
 function left()
 {
-    lightPosition[0] -= LIGHT_DELTA;
+    atPosition[0] -= AT_DELTA;
 }
 function right()
 {
-    lightPosition[0] += LIGHT_DELTA;
+    atPosition[0] += AT_DELTA;
 }
 function up()
 {
-    lightPosition[1] += LIGHT_DELTA;
+    atPosition[1] += AT_DELTA;
 }
 function down()
 {
-    lightPosition[1] -= LIGHT_DELTA;
+    atPosition[1] -= AT_DELTA;
 }
 function near()
 {
-    lightPosition[2] += LIGHT_DELTA;
+    atPosition[2] += AT_DELTA;
 }
 function far()
 {
-    lightPosition[2] -= LIGHT_DELTA;
+    atPosition[2] -= AT_DELTA;
 }
 
 function forward()
@@ -257,9 +274,9 @@ function cameraDown()
 
 function pause()
 {
-    if (isPaused)
-        render();
     isPaused = !isPaused;
+    if (!isPaused)
+        render();
 }
 
 function updateFPS()
@@ -387,7 +404,7 @@ function setUniforms(program)
 function setProjection()
 {
     aspect = canvas.width/canvas.height;
-    var projectionMatrix = perspective(fovy, aspect, 0.1, 10);
+    var projectionMatrix = perspective(fovy, aspect, 0.1, RENDER_DISTANCE);
     gl.uniformMatrix4fv(uniforms["projectionMatrix"], false, flatten(projectionMatrix));
 }
 
@@ -424,48 +441,77 @@ function configureTexture(image, name, index) {
     textureLocations[name] = index;
 }
 
+function generateWorld()
+{
+    for (var i = -Math.floor(WORLD_WIDTH/2); i < Math.floor(WORLD_WIDTH/2); i++)
+    {
+        for (var j = -Math.floor(WORLD_DEPTH/2); j < Math.floor(WORLD_DEPTH/2); j++)
+        {
+            blocks.push(new Block("cobblestone", i, 0, j));
+        }
+    }
+    blocks.push(new Block("cobblestone", 0, 1, 0));
+
+    var sunlight = new Light(
+        vec4(0.3, 0.3, 0.3, 1.0),
+        vec4(0.9, 0.9, 0.9, 1.0),
+        vec4(1.0, 1.0, 1.0, 1.0),
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        false
+    );
+    lights.push(sunlight);
+}
+
+function updateWorld()
+{
+    tickCounter++;
+    //var velocity = vec3(player.velocity[0]/TICKRATE, player.velocity[1]/TICKRATE, player.velocity[2]/TICKRATE);
+    //player.position = add(player.position, velocity);
+    var z = Math.cos(tickCounter/WORLD_DAY_CYCLE*Math.PI);
+    var y = Math.sin(tickCounter/WORLD_DAY_CYCLE*Math.PI);
+    lights[0].position = vec4(0.0, y, z, 0.0);
+    lights[0].fresh = true;
+
+    if (tickCounter >= WORLD_DAY_CYCLE)
+    {
+        tickCounter = 0;
+        dayCounter++;
+    }
+}
+
 function render()
 {
-    var at = vec3(0.0, 0.0, 0.0);
     var up = vec3(0.0, 1.0, 0.0);
-    var viewMatrix = lookAt(cameraPosition, at, up);
+    var viewMatrix = lookAt(cameraPosition, atPosition, up);
     gl.uniformMatrix4fv(uniforms["viewMatrix"], false, flatten(viewMatrix));
     gl.uniform3fv(uniforms["viewPosition"], cameraPosition);
 
-    var lightPos2 = vec4(-1.0, -1.0, -1.0, 0.0);
-    var lightPos3 = vec4(0.0, 0.0, 2.0, 1.0);
-    gl.uniform4fv(uniforms["lights[0].position"], flatten(lightPosition));
-    gl.uniform4fv(uniforms["lights[1].position"], flatten(lightPos2));
-    gl.uniform4fv(uniforms["lights[2].position"], flatten(lightPos3));
-
-    var attenuationCoef = 0.5;
-    var ambient = vec4(0.1, 0.1, 0.2, 1.0);
-    var diffuse = vec4(0.6, 0.6, 0.7, 1.0);
-    var specular = vec4(0.9, 0.9, 0.95, 1.0);
-    var shininess = 100.0;
-
-    var activeLights = [
-        true,
-        true,
-        true
-    ];
-
-    for (var i = 0; i < 3; i++)
+    // Update lights
+    for (var i = 0; i < lights.length; i++)
     {
-        gl.uniform1i(uniforms["lights[" + i + "].isActive"], activeLights[i]);
-        gl.uniform4fv(uniforms["lights[" + i + "].ambient"], flatten(ambient));
-        gl.uniform4fv(uniforms["lights[" + i + "].diffuse"], flatten(diffuse));
-        gl.uniform4fv(uniforms["lights[" + i + "].specular"], flatten(specular));
-        gl.uniform1f(uniforms["lights[" + i + "].attenuationCoef"], attenuationCoef);
-        gl.uniform1f(uniforms["lights[" + i + "].shininess"], shininess);
+        if (lights[i].fresh)
+        {
+            gl.uniform4fv(uniforms["lights[" + i + "].position"], flatten(lights[i].position));
+            gl.uniform1i(uniforms["lights[" + i + "].isActive"], lights[i].isActive);
+            gl.uniform4fv(uniforms["lights[" + i + "].ambient"], flatten(lights[i].ambient));
+            gl.uniform4fv(uniforms["lights[" + i + "].diffuse"], flatten(lights[i].diffuse));
+            gl.uniform4fv(uniforms["lights[" + i + "].specular"], flatten(lights[i].specular));
+            gl.uniform1f(uniforms["lights[" + i + "].attenuationCoef"], lights[i].attenuationCoef);
+            lights[i].fresh = false;
+        }
     }
 
+    // Draw blocks
     blocks.forEach(function (block) {
         if (block.material != recentMaterial)
         {
             gl.uniform4fv(uniforms["material.ambient"], flatten(block.material.ambient));
             gl.uniform4fv(uniforms["material.diffuse"], flatten(block.material.diffuse));
             gl.uniform4fv(uniforms["material.specular"], flatten(block.material.specular));
+            gl.uniform1f(uniforms["material.shininess"], block.material.shininess);
             gl.uniform1i(uniforms["material.texture"], textureLocations[block.material.textureName]);
 
             recentMaterial = block.material;
