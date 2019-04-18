@@ -4,6 +4,7 @@ var gl, canvas;
 var cubeVertices = [];
 var NUM_CUBE_VERTICES = 36;
 var cubeNormals = [];
+var cubeTexturePoints = [];
 
 // Uniform locations
 var uniforms = {};
@@ -30,19 +31,75 @@ var MATERIAL_FIELDS = [
     "specular"
 ];
 
+// Material textures
+var TEXTURES = [
+    "test",
+    "cobblestone"
+];
+// Contains the location that the texture was loaded into
+var textureLocations = {};
+
+// Contains info about types of materials
+function Material(ambient, diffuse, specular, shininess, textureName)
+{
+    this.ambient = ambient;
+    this.diffuse = diffuse;
+    this.specular = specular;
+    this.shininess = shininess;
+    this.textureName = textureName;
+}
+// Contains info about each "block"
+function Block(material, x, y, z)
+{
+    this.material = material;
+    this.position = vec3(x, y, z);
+}
+// Contains info about each light source
+function Light(ambient, diffuse, specular, attenuationCoef, x, y, z, isPoint = true)
+{
+    this.ambient = ambient;
+    this.diffuse = diffuse;
+    this.specular = specular;
+    this.attenuationCoef = attenuationCoef;
+    if (isPoint)
+        this.position = vec4(x, y, z, 1.0);
+    else
+        this.position = vec4(x, y, z, 0.0);
+}
+
+// Available materials
+var MATERIALS = {
+    "cobblestone": new Material(
+        vec4(0.5, 0.5, 0.55, 1.0),
+        vec4(0.8, 0.8, 0.85, 1.0),
+        vec4(1.0, 1.0, 1.0, 1.0),
+        10.0,
+        "cobblestone"
+    ),
+    "cobblestone2": new Material(
+        vec4(0.5, 0.5, 0.70, 1.0),
+        vec4(0.8, 0.8, 0.95, 1.0),
+        vec4(1.0, 1.0, 1.0, 1.0),
+        10.0,
+        "cobblestone"
+    )
+}
+
+// Contains all the "blocks" in the world
+var blocks = [
+    new Block(MATERIALS["cobblestone"], 0.0, 0.0, 0.0),
+    new Block(MATERIALS["cobblestone2"], -1.0, 0.0, 0.0)
+];
+// Contains all the lights in the world
+var lights = [];
+// Stores the most recently used material
+var recentMaterial;
+
 var lightPosition = vec4(0.0, 1.0, 0.0, 1.0);
 var LIGHT_DELTA = 0.1;
 
 var cameraPosition = vec3(1.0, 1.0, 1.0);
 var CAMERA_DELTA = 0.1;
-
-// Identity matrix for base transform
-var identityMatrix = [
-    [1, 0, 0, 0],
-    [0, 1, 0, 0],
-    [0, 0, 1, 0],
-    [0, 0, 0, 1]
-];
 
 // Transform for model view matrices
 function scale4(a, b, c) {
@@ -85,6 +142,7 @@ window.onload = function()
     createBuffers(program);
     setUniforms(program);
     setProjection();
+    loadTextures(program);
 
     frameCounterID = setInterval(updateFPS, 1000.0 * FPS_REFRESH_RATE);
 
@@ -174,27 +232,27 @@ function far()
 
 function forward()
 {
-    cameraPosition[2] -= LIGHT_DELTA;
+    cameraPosition[2] -= CAMERA_DELTA;
 }
 function backward()
 {
-    cameraPosition[2] += LIGHT_DELTA;
+    cameraPosition[2] += CAMERA_DELTA;
 }
 function moveLeft()
 {
-    cameraPosition[0] -= LIGHT_DELTA;
+    cameraPosition[0] -= CAMERA_DELTA;
 }
 function moveRight()
 {
-    cameraPosition[0] += LIGHT_DELTA;
+    cameraPosition[0] += CAMERA_DELTA;
 }
 function cameraUp()
 {
-    cameraPosition[1] += LIGHT_DELTA;
+    cameraPosition[1] += CAMERA_DELTA;
 }
 function cameraDown()
 {
-    cameraPosition[1] -= LIGHT_DELTA;
+    cameraPosition[1] -= CAMERA_DELTA;
 }
 
 function pause()
@@ -207,7 +265,7 @@ function pause()
 function updateFPS()
 {
     var fps = numFrames / FPS_REFRESH_RATE;
-    console.log(fps);
+    console.log("FPS: ", fps);
 
     numFrames = 0;
 }
@@ -224,15 +282,27 @@ function createGeometry()
         vec4(-0.5, -0.5, 0.5, 1.0), // 6
         vec4(-0.5, -0.5, -0.5, 1.0) // 7
     ]
+    var texturePoints = [
+        vec2(1.0, 1.0),
+        vec2(1.0, 0.0),
+        vec2(0.0, 1.0),
+        vec2(0.0, 0.0)
+    ];
 
     function addFace(a, b, c, d)
     {
         cubeVertices.push(cubePoints[a]);
+        cubeTexturePoints.push(texturePoints[0]);
         cubeVertices.push(cubePoints[b]);
+        cubeTexturePoints.push(texturePoints[1]);
         cubeVertices.push(cubePoints[c]);
+        cubeTexturePoints.push(texturePoints[3]);
         cubeVertices.push(cubePoints[d]);
+        cubeTexturePoints.push(texturePoints[2]);
         cubeVertices.push(cubePoints[a]);
+        cubeTexturePoints.push(texturePoints[0]);
         cubeVertices.push(cubePoints[c]);
+        cubeTexturePoints.push(texturePoints[3]);
 
         var t1 = subtract(cubePoints[c], cubePoints[b]);
         var t2 = subtract(cubePoints[b], cubePoints[a]);
@@ -248,7 +318,7 @@ function createGeometry()
     addFace(1, 4, 2, 0);    // x
     addFace(7, 6, 2, 4);    // -y
     addFace(3, 6, 7, 5);    // -x
-    addFace(0, 2, 6, 3);    // z
+    addFace(6, 3, 0, 2);    // z
 }
 
 function createBuffers(program)
@@ -273,6 +343,14 @@ function createVertexBuffer(program, points)
     var vNormal = gl.getAttribLocation(program, "vNormal");
     gl.vertexAttribPointer(vNormal, 3, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(vNormal);
+
+    var tBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(cubeTexturePoints), gl.STATIC_DRAW);
+    
+    var vTexPos = gl.getAttribLocation(program, "vTexPos");
+    gl.vertexAttribPointer(vTexPos, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vTexPos);
 }
 
 function setUniforms(program)
@@ -281,7 +359,8 @@ function setUniforms(program)
         "projectionMatrix",
         "modelMatrix",
         "viewMatrix",
-        "viewPosition"
+        "viewPosition",
+        "material.texture"
     ];
 
     // Add lights array with its fields
@@ -310,6 +389,39 @@ function setProjection()
     aspect = canvas.width/canvas.height;
     var projectionMatrix = perspective(fovy, aspect, 0.1, 10);
     gl.uniformMatrix4fv(uniforms["projectionMatrix"], false, flatten(projectionMatrix));
+}
+
+function loadTextures(program)
+{
+    for (var i = 0; i < TEXTURES.length; i++)
+    {
+        configureTexture(document.getElementById(TEXTURES[i]), TEXTURES[i], i);
+    }
+}
+
+function isPowerOf2(value)
+{
+    return (value & (value - 1)) == 0;
+}
+
+function configureTexture(image, name, index) {
+    texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + index);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    if (isPowerOf2(image.width) && isPowerOf2(image.height))
+        gl.generateMipmap(gl.TEXTURE_2D);
+    else
+    {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
+    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    textureLocations[name] = index;
 }
 
 function render()
@@ -348,22 +460,22 @@ function render()
         gl.uniform1f(uniforms["lights[" + i + "].shininess"], shininess);
     }
 
-    ambient = vec4(0.5, 0.5, 0.55, 1.0);
-    diffuse = vec4(0.8, 0.8, 0.85, 1.0);
-    specular = vec4(1.0, 1.0, 1.0, 1.0);
+    blocks.forEach(function (block) {
+        if (block.material != recentMaterial)
+        {
+            gl.uniform4fv(uniforms["material.ambient"], flatten(block.material.ambient));
+            gl.uniform4fv(uniforms["material.diffuse"], flatten(block.material.diffuse));
+            gl.uniform4fv(uniforms["material.specular"], flatten(block.material.specular));
+            gl.uniform1i(uniforms["material.texture"], textureLocations[block.material.textureName]);
 
-    gl.uniform4fv(uniforms["material.ambient"], flatten(ambient));
-    gl.uniform4fv(uniforms["material.diffuse"], flatten(diffuse));
-    gl.uniform4fv(uniforms["material.specular"], flatten(specular));
+            recentMaterial = block.material;
+        }
 
-    var modelMatrix = identityMatrix;
-    gl.uniformMatrix4fv(uniforms["modelMatrix"], false, flatten(modelMatrix));
-    gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
+        var modelMatrix = translate(block.position);
+        gl.uniformMatrix4fv(uniforms["modelMatrix"], false, flatten(modelMatrix));
 
-    modelMatrix = translate(-1.0, 0.0, 0.0);
-    gl.uniformMatrix4fv(uniforms["modelMatrix"], false, flatten(modelMatrix));
-
-    gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
+        gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
+    })
 
     numFrames++;
     if (!isPaused)

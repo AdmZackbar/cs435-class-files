@@ -10,6 +10,7 @@
 
         attribute vec4 vPosition;
         attribute vec3 vNormal;
+        attribute vec2 vTexPos;
 
         uniform mat4 projectionMatrix, modelMatrix, viewMatrix;
         uniform vec3 viewPosition;
@@ -26,6 +27,7 @@
 
         varying vec3 normal, surfaceToView;
         varying vec3 surfaceToLight[MAX_LIGHTS];
+        varying vec2 fTexPos;
         
         void main()
         {
@@ -37,6 +39,7 @@
             {
                 surfaceToLight[i] = (lights[i].position - worldPosition).xyz;
             }
+            fTexPos = vTexPos;
 
             gl_Position = projectionMatrix * viewMatrix * modelMatrix * vPosition;
         }
@@ -61,10 +64,12 @@
             vec4 ambient;
             vec4 diffuse;
             vec4 specular;
+            sampler2D texture;
         } material;
 
         varying vec3 normal, surfaceToView;
         varying vec3 surfaceToLight[MAX_LIGHTS];
+        varying vec2 fTexPos;
 
         vec4 applyLight(Light light, vec3 normal, vec3 surfaceToView, vec3 surfaceToLight)
         {
@@ -110,8 +115,10 @@
                     fColor += applyLight(lights[i], normalDir, surfaceToViewDir, surfaceToLight[i]);
             }
 
+            vec4 texColor = texture2D(material.texture, fTexPos);
+
             fColor.a = 1.0;
-            gl_FragColor = fColor;
+            gl_FragColor = fColor * texColor;
         }
     </script>
     <script type="text/javascript" src="../Common/webgl-utils.js"></script>
@@ -123,5 +130,7 @@
     <canvas id="gl-canvas" width="1024" height="576">
     Canvas was not loaded - Brower does not support HTML5.
     </canvas>
+    <img id="cobblestone" src="textures/Cobblestone.png" hidden></img>
+    <img id="test" src="textures/Test.png" hidden></img>
 </body>
 </html>
