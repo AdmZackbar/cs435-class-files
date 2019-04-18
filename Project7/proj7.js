@@ -89,11 +89,57 @@ var lights = [];
 // Stores the most recently used material
 var recentMaterial;
 
-// Stores all the player-related info
+// Stores all the player-related info and abilities
 var player = {
     "position": vec3(0.0, 0.0, 0.0),
-    "lookAt": vec3(0.0, 0.0, -1.0),
-    "velocity": vec3(0.0, 0.0, 0.0)
+    "lookAt": vec3(0.0, 2.0, -1.0),
+    "eyeHeight": 2.0,
+    "theta": 0.0,
+    "phi": 0.0,
+    "velocity": vec3(0.0, 0.0, 0.0),
+    "movementSpeed": 2.5,
+    "calculateLook": function(deltaX, deltaY) {
+        this.theta += (deltaX/canvas.width)*SENSITIVITY*fovy;
+        if (this.theta >= 360)
+            this.theta -= 360;
+        if (this.theta < 0)
+            this.theta += 360;
+        this.phi += (deltaY/canvas.height)*SENSITIVITY*fovy;
+        if (this.phi >= 90)
+            this.phi = 90;
+        if (this.phi < -90)
+            this.phi = -90;
+        
+        var absoluteChange = vec3(Math.sin(radians(this.theta)), (-Math.sin(radians(this.phi)) + this.eyeHeight), -Math.cos(radians(this.theta)));
+        this.lookAt = add(this.position, absoluteChange);
+    },
+    "getEye": function() {
+        return add(this.position, vec3(0, this.eyeHeight, 0));
+    },
+    "moveLeft": function() {
+        this.velocity[0] = -this.movementSpeed;
+    },
+    "moveRight": function() {
+        this.velocity[0] = this.movementSpeed;
+    },
+    "moveForward": function() {
+        this.velocity[2] = -this.movementSpeed;
+    },
+    "moveBackward": function() {
+        this.velocity[2] = this.movementSpeed;
+    },
+    "stopLeft": function() {
+        this.velocity[0] = 0;
+    },
+    "stopRight": function() {
+        this.velocity[0] = 0;
+    },
+    "stopForward": function() {
+        this.velocity[2] = 0;
+    },
+    "stopBackward": function() {
+        this.velocity[2] = 0;
+    }
 }
 
 // Controls how often the world is updated(in hz)
@@ -105,6 +151,9 @@ var AT_DELTA = 0.1;
 
 var cameraPosition = vec3(1.0, 1.0, 1.0);
 var CAMERA_DELTA = 0.1;
+
+// Determines how much mouse movement changes the camera angle
+var SENSITIVITY = 2.0;
 
 var RENDER_DISTANCE = 30;
 
@@ -122,6 +171,16 @@ function scale4(a, b, c) {
     result[1][1] = b;
     result[2][2] = c;
     return result;
+}
+// Checks if the value has a base of 2
+function isPowerOf2(value)
+{
+    return (value & (value - 1)) == 0;
+}
+// Converts the given value(in degrees) to radians
+function radians(degrees)
+{
+    return (degrees / 180.0) * Math.PI;
 }
 
 var isPaused = false;
@@ -163,36 +222,44 @@ window.onload = function()
     frameCounterID = setInterval(updateFPS, 1000.0*FPS_REFRESH_RATE);
     updaterID = setInterval(updateWorld, 1000.0/TICKRATE);
 
+    canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+    document.addEventListener("mousemove", updateLook, false);
+
     render();
+}
+
+window.onclick = function(event)
+{
+    canvas.requestPointerLock();
 }
 
 function setupInput()
 {
-    document.addEventListener("keydown", function(event)
+    document.addEventListener("keydown", function (event)
     {
         switch(event.keyCode)
         {
             case 37:    // left
             case 65:    // a
-                left();
-                break;;
+                player.moveLeft();
+                break;
             case 39:    // right
             case 68:    // d
-                right();
+                player.moveRight();
                 break;
             case 38:    // up
             case 87:    // w
-                up();
+                player.moveForward();
                 break;
             case 40:    // down
             case 83:    // s
-                down();
+                player.moveBackward();
                 break;
             case 81:    // q
-                far();
+                //far();
                 break;
             case 69:    // e
-                near();
+                //near();
                 break;
             case 73:    // i
                 cameraUp();
@@ -219,32 +286,32 @@ function setupInput()
                 return;
         }
         //render();
-    })
-}
-
-function left()
-{
-    atPosition[0] -= AT_DELTA;
-}
-function right()
-{
-    atPosition[0] += AT_DELTA;
-}
-function up()
-{
-    atPosition[1] += AT_DELTA;
-}
-function down()
-{
-    atPosition[1] -= AT_DELTA;
-}
-function near()
-{
-    atPosition[2] += AT_DELTA;
-}
-function far()
-{
-    atPosition[2] -= AT_DELTA;
+    });
+    document.addEventListener("keyup", function (event)
+    {
+        switch(event.keyCode)
+        {
+            case 37:    // left
+            case 65:    // a
+                player.stopLeft();
+                break;
+            case 39:    // right
+            case 68:    // d
+                player.stopRight();
+                break;
+            case 38:    // up
+            case 87:    // w
+                player.stopForward();
+                break;
+            case 40:    // down
+            case 83:    // s
+                player.stopBackward();
+                break;
+            default:
+                return;
+        }
+        //render();
+    });
 }
 
 function forward()
@@ -416,11 +483,6 @@ function loadTextures(program)
     }
 }
 
-function isPowerOf2(value)
-{
-    return (value & (value - 1)) == 0;
-}
-
 function configureTexture(image, name, index) {
     texture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0 + index);
@@ -450,7 +512,11 @@ function generateWorld()
             blocks.push(new Block("cobblestone", i, 0, j));
         }
     }
-    blocks.push(new Block("cobblestone", 0, 1, 0));
+    blocks.push(new Block("cobblestone", 1, 1, 1));
+    blocks.push(new Block("cobblestone", 1, 2, 1));
+    blocks.push(new Block("cobblestone", 1, 3, 1));
+    blocks.push(new Block("cobblestone", 1, 4, 1));
+    blocks.push(new Block("cobblestone", 1, 5, 1));
 
     var sunlight = new Light(
         vec4(0.3, 0.3, 0.3, 1.0),
@@ -470,10 +536,20 @@ function updateWorld()
     tickCounter++;
     //var velocity = vec3(player.velocity[0]/TICKRATE, player.velocity[1]/TICKRATE, player.velocity[2]/TICKRATE);
     //player.position = add(player.position, velocity);
+    // Simulate sun movement
     var z = Math.cos(tickCounter/WORLD_DAY_CYCLE*Math.PI);
     var y = Math.sin(tickCounter/WORLD_DAY_CYCLE*Math.PI);
     lights[0].position = vec4(0.0, y, z, 0.0);
     lights[0].fresh = true;
+
+    // Update player position
+    var deltaPos = vec3(player.velocity[0]/TICKRATE, player.velocity[1]/TICKRATE, player.velocity[2]/TICKRATE);
+    var deltaZ = deltaPos[2]*Math.cos(radians(player.theta)) + deltaPos[0]*Math.sin(radians(player.theta));
+    var deltaX = -deltaPos[2]*Math.sin(radians(player.theta)) + deltaPos[0]*Math.cos(radians(player.theta));
+    player.position[0] += deltaX;
+    player.lookAt[0] += deltaX;
+    player.position[2] += deltaZ;
+    player.lookAt[2] += deltaZ;
 
     if (tickCounter >= WORLD_DAY_CYCLE)
     {
@@ -482,10 +558,16 @@ function updateWorld()
     }
 }
 
+function updateLook(event)
+{
+    player.calculateLook(event.movementX, event.movementY);
+}
+
 function render()
 {
     var up = vec3(0.0, 1.0, 0.0);
-    var viewMatrix = lookAt(cameraPosition, atPosition, up);
+    cameraPosition = player.getEye();
+    var viewMatrix = lookAt(cameraPosition, player.lookAt, up);
     gl.uniformMatrix4fv(uniforms["viewMatrix"], false, flatten(viewMatrix));
     gl.uniform3fv(uniforms["viewPosition"], cameraPosition);
 
@@ -494,13 +576,7 @@ function render()
     {
         if (lights[i].fresh)
         {
-            gl.uniform4fv(uniforms["lights[" + i + "].position"], flatten(lights[i].position));
-            gl.uniform1i(uniforms["lights[" + i + "].isActive"], lights[i].isActive);
-            gl.uniform4fv(uniforms["lights[" + i + "].ambient"], flatten(lights[i].ambient));
-            gl.uniform4fv(uniforms["lights[" + i + "].diffuse"], flatten(lights[i].diffuse));
-            gl.uniform4fv(uniforms["lights[" + i + "].specular"], flatten(lights[i].specular));
-            gl.uniform1f(uniforms["lights[" + i + "].attenuationCoef"], lights[i].attenuationCoef);
-            lights[i].fresh = false;
+            updateLight(lights[i], i);
         }
     }
 
@@ -526,4 +602,15 @@ function render()
     numFrames++;
     if (!isPaused)
         requestAnimationFrame(render);
+}
+
+function updateLight(light, index)
+{
+    gl.uniform4fv(uniforms["lights[" + index + "].position"], flatten(light.position));
+    gl.uniform1i(uniforms["lights[" + index + "].isActive"], light.isActive);
+    gl.uniform4fv(uniforms["lights[" + index + "].ambient"], flatten(light.ambient));
+    gl.uniform4fv(uniforms["lights[" + index + "].diffuse"], flatten(light.diffuse));
+    gl.uniform4fv(uniforms["lights[" + index + "].specular"], flatten(light.specular));
+    gl.uniform1f(uniforms["lights[" + index + "].attenuationCoef"], light.attenuationCoef);
+    light.fresh = false;
 }
