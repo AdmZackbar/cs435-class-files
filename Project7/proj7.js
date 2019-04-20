@@ -80,14 +80,65 @@ var MATERIALS = {
         10.0,
         "cobblestone"
     )
-}
+};
 
-// Contains all the "blocks" in the world
-var blocks = [];
-// Contains all the lights in the world
-var lights = [];
+// Stores all the info about the world and functions for manipulating it
+var world = {
+    "width": 31,
+    "height": 20,
+    "depth": 31,
+    "shiftX": null,
+    "shiftZ": null,
+    "blocks": [],
+    "blockArray": [this.width],
+    "lights": [],
+    "generateArray": function () {
+        for (var i=0; i<this.width; i++) {
+            this.blockArray[i] = [this.height]
+            for (var j=0; j<this.height; j++) {
+                this.blockArray[i][j] = [this.depth];
+                for (var k=0; k<this.depth; k++) {
+                    this.blockArray[i][j][k] = null;
+                }
+            }
+        }
+        this.shiftX = Math.floor(this.width/2);
+        this.shiftZ = Math.floor(this.depth/2);
+    },
+    "placeBlock": function (material, x, y, z) {
+        var block = new Block(material, x, y, z);
+        this.blocks.push(block);
+        this.blockArray[x+this.shiftX][y][z+this.shiftZ] = block;
+    },
+    "getBlock": function (position) {
+        var x = Math.floor(position[0]);
+        var y = Math.floor(position[1]);
+        var z = Math.floor(position[2]);
+        return this.blockArray[x+this.shiftX][y][z+this.shiftZ];
+    },
+    "removeBlock": function (position) {
+        console.log("Attempting to remove block at: ", position);
+        var blockIndex = this.blocks.findIndex(function (element) {
+            if (element.position == position)
+                return true;
+            return false;
+        });
+        if (blockIndex == -1)
+        {
+            console.log("Error: could not find the specified block in removeBlock()");
+            return;
+        }
+        this.blockArray[position[0]+this.shiftX][position[1]][position[2]+this.shiftZ] = null;
+        this.blocks.splice(blockIndex, 1);
+        player.lookAtBlock = null;
+    }
+};
 // Stores the most recently used material
 var recentMaterial;
+// Determines the accuracy of the lookAt function(higher is more precise)
+var LOOKAT_PRECISION = 2.0;
+// Sets the max distance that the lookAt function will check for a block
+var LOOKAT_MAX_DIST = 4.0;
 
 // Stores all the player-related info and abilities
 var player = {
@@ -97,7 +148,10 @@ var player = {
     "theta": 0.0,
     "phi": 0.0,
     "velocity": vec3(0.0, 0.0, 0.0),
-    "movementSpeed": 2.5,
+    "movementSpeed": 3.5,
+    "walkSpeed": 3.5,
+    "sprintSpeed": 6,
+    "lookAtBlock": null,
     "calculateLook": function(deltaX, deltaY) {
         this.theta += (deltaX/canvas.width)*SENSITIVITY*fovy;
         if (this.theta >= 360)
@@ -112,6 +166,64 @@ var player = {
         
         var absoluteChange = vec3(Math.sin(radians(this.theta)), (-Math.sin(radians(this.phi)) + this.eyeHeight), -Math.cos(radians(this.theta)));
         this.lookAt = add(this.position, absoluteChange);
+    },
+    "calculateLookBlock": function() {
+        var startPoint = this.getEye();
+        var delta = subtract(this.lookAt, startPoint);
+        var dx = delta[0]/LOOKAT_PRECISION;
+        var dy = delta[1]/LOOKAT_PRECISION;
+        var dz = delta[2]/LOOKAT_PRECISION;
+        var adjustedDelta = vec3(dx, dy, dz);
+
+        // Adjust for world coordinates
+        var vector = add(startPoint, vec3(0.5, 0.5, 0.5));
+        var block = world.getBlock(vector);
+        // Handle as parametric equation
+        for (var i=0; i<LOOKAT_MAX_DIST; i+=1.0/LOOKAT_PRECISION) {
+            if (block)
+            {
+                this.lookAtBlock = block;
+                return block;
+            }
+            vector = add(vector, adjustedDelta);
+            block = world.getBlock(vector);
+        }
+        this.lookAtBlock = null;
+        return null;
+    },
+    "breakBlock": function() {
+        if (this.lookAtBlock != null)
+            world.removeBlock(this.lookAtBlock.position);
+    },
+    "placeBlock": function() {
+        if (this.lookAtBlock != null)
+        {
+            var eyePos = this.getEye();
+            var dx = Math.abs(this.lookAtBlock[0] - eyePos[0]);
+            var dy = Math.abs(this.lookAtBlock[1] - eyePos[1]);
+            var dz = Math.abs(this.lookAtBlock[2] - eyePos[2]);
+            var max = Math.max(dx, dy, dz);
+            var blockPos = this.lookAtBlock.position;
+            console.log(blockPos);
+            if (max == dx)
+            {
+                if (this.lookAtBlock[0] - eyePos[0] > 0)
+                    blockPos[0] -= 1;
+                else
+                    blockPos[0] += 1;
+            } else if (max == dy) {
+                if (this.lookAtBlock[1] - eyePos[1] > 0)
+                    blockPos[1] -= 1;
+                else
+                    blockPos[1] += 1;
+            } else {
+                if (this.lookAtBlock[0] - eyePos[0] > 0)
+                    blockPos[2] -= 1;
+                else
+                    blockPos[2] += 1;
+            }
+            world.placeBlock("cobblestone", blockPos[0], blockPos[1], blockPos[2]);
+        }
     },
     "getEye": function() {
         return add(this.position, vec3(0, this.eyeHeight, 0));
@@ -128,6 +240,15 @@ var player = {
     "moveBackward": function() {
         this.velocity[2] = this.movementSpeed;
     },
+    "moveUp": function() {
+        this.velocity[1] = this.movementSpeed;
+    },
+    "moveDown": function() {
+        this.velocity[1] = -this.movementSpeed;
+    },
+    "sprint": function() {
+        this.movementSpeed = this.sprintSpeed;
+    },
     "stopLeft": function() {
         this.velocity[0] = 0;
     },
@@ -139,12 +260,23 @@ var player = {
     },
     "stopBackward": function() {
         this.velocity[2] = 0;
+    },
+    "stopUp": function() {
+        this.velocity[1] = 0;
+    },
+    "stopDown": function() {
+        this.velocity[1] = 0;
+    },
+    "stopSprint": function() {
+        this.movementSpeed = this.walkSpeed;
     }
-}
+};
 
 // Controls how often the world is updated(in hz)
 var TICKRATE = 60;
 var updaterID;
+
+var GRAVITY = 10;
 
 var atPosition = vec3(0.0, 0.0, 0.0);
 var AT_DELTA = 0.1;
@@ -157,8 +289,6 @@ var SENSITIVITY = 2.0;
 
 var RENDER_DISTANCE = 30;
 
-var WORLD_WIDTH = 31;
-var WORLD_DEPTH = 31;
 // Amount of time in a full "day"(in ticks)
 var WORLD_DAY_CYCLE = 10.0*TICKRATE;
 var tickCounter = 0;
@@ -219,7 +349,7 @@ window.onload = function()
 
     generateWorld();
 
-    frameCounterID = setInterval(updateFPS, 1000.0*FPS_REFRESH_RATE);
+    //frameCounterID = setInterval(updateFPS, 1000.0*FPS_REFRESH_RATE);
     updaterID = setInterval(updateWorld, 1000.0/TICKRATE);
 
     canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
@@ -255,6 +385,15 @@ function setupInput()
             case 83:    // s
                 player.moveBackward();
                 break;
+            case 32:    // space
+                player.moveUp();
+                break;
+            case 17:    // ctrl(left)
+                player.moveDown();
+                break;
+            case 16:    // shift(left)
+                player.sprint();
+                break;
             case 81:    // q
                 //far();
                 break;
@@ -265,7 +404,7 @@ function setupInput()
                 cameraUp();
                 break;
             case 75:    // k
-                cameraDown();
+                pause();
                 break;
             case 74:    // j
                 moveLeft();
@@ -278,9 +417,6 @@ function setupInput()
                 break;
             case 79:    // o
                 backward();
-                break;
-            case 32:    // space
-                pause();
                 break;
             default:
                 return;
@@ -307,10 +443,32 @@ function setupInput()
             case 83:    // s
                 player.stopBackward();
                 break;
+            case 32:    // space
+                player.stopUp();
+                break;
+            case 17:    // shift
+                player.stopDown();
+                break;
+            case 16:    // shift(left)
+                player.stopSprint();
+                break;
             default:
                 return;
         }
         //render();
+    });
+    document.addEventListener("mousedown", function(event) {
+        switch (event.which)
+        {
+            case 1: // left mouse
+                player.breakBlock();
+                break;
+            case 2: // middle mouse
+                break;
+            case 3: // right mouse
+                //player.placeBlock();
+                break;
+        }
     });
 }
 
@@ -505,18 +663,19 @@ function configureTexture(image, name, index) {
 
 function generateWorld()
 {
-    for (var i = -Math.floor(WORLD_WIDTH/2); i < Math.floor(WORLD_WIDTH/2); i++)
+    world.generateArray();
+    for (var i = -Math.floor(world.width/2); i < Math.floor(world.width/2); i++)
     {
-        for (var j = -Math.floor(WORLD_DEPTH/2); j < Math.floor(WORLD_DEPTH/2); j++)
+        for (var j = -Math.floor(world.depth/2); j < Math.floor(world.depth/2); j++)
         {
-            blocks.push(new Block("cobblestone", i, 0, j));
+            world.placeBlock("cobblestone", i, 0, j);
         }
     }
-    blocks.push(new Block("cobblestone", 1, 1, 1));
-    blocks.push(new Block("cobblestone", 1, 2, 1));
-    blocks.push(new Block("cobblestone", 1, 3, 1));
-    blocks.push(new Block("cobblestone", 1, 4, 1));
-    blocks.push(new Block("cobblestone", 1, 5, 1));
+    world.placeBlock("cobblestone", 1, 1, 1);
+    world.placeBlock("cobblestone", 1, 2, 1);
+    world.placeBlock("cobblestone", 1, 3, 1);
+    world.placeBlock("cobblestone", 1, 4, 1);
+    world.placeBlock("cobblestone", 1, 5, 1);
 
     var sunlight = new Light(
         vec4(0.3, 0.3, 0.3, 1.0),
@@ -528,28 +687,53 @@ function generateWorld()
         0.0,
         false
     );
-    lights.push(sunlight);
+    world.lights.push(sunlight);
 }
 
 function updateWorld()
 {
     tickCounter++;
-    //var velocity = vec3(player.velocity[0]/TICKRATE, player.velocity[1]/TICKRATE, player.velocity[2]/TICKRATE);
-    //player.position = add(player.position, velocity);
+
+    // Simulate gravity
+    //player.velocity[1] -= GRAVITY/TICKRATE;
+
     // Simulate sun movement
     var z = Math.cos(tickCounter/WORLD_DAY_CYCLE*Math.PI);
     var y = Math.sin(tickCounter/WORLD_DAY_CYCLE*Math.PI);
-    lights[0].position = vec4(0.0, y, z, 0.0);
-    lights[0].fresh = true;
+    world.lights[0].position = vec4(0.0, y, z, 0.0);
+    world.lights[0].fresh = true;
 
     // Update player position
     var deltaPos = vec3(player.velocity[0]/TICKRATE, player.velocity[1]/TICKRATE, player.velocity[2]/TICKRATE);
     var deltaZ = deltaPos[2]*Math.cos(radians(player.theta)) + deltaPos[0]*Math.sin(radians(player.theta));
+    var deltaY = player.velocity[1]/TICKRATE;
     var deltaX = -deltaPos[2]*Math.sin(radians(player.theta)) + deltaPos[0]*Math.cos(radians(player.theta));
     player.position[0] += deltaX;
     player.lookAt[0] += deltaX;
+    player.position[1] += deltaY;
+    player.lookAt[1] += deltaY;
     player.position[2] += deltaZ;
     player.lookAt[2] += deltaZ;
+
+    // Find the block the player is looking at
+    var block = player.calculateLookBlock();
+    //console.log(block);
+
+    /*
+    // Check for collision
+    var block = world.getBlock(add(player.position, vec3(0.3, 0.3, 0.3))) ||
+                world.getBlock(add(player.position, vec3(0.3, 0.7, 0.3))) ||
+                world.getBlock(add(player.position, vec3(0.3, 0.3, 0.3))) ||
+                world.getBlock(add(player.position, vec3(0.7, 0.7, 0.7)));
+    if (block != null)
+    {
+        player.position[0] -= deltaX;
+        player.lookAt[0] -= deltaX;
+        player.position[2] -= deltaZ;
+        player.lookAt[2] -= deltaZ;
+        console.log("collision detected");
+    }
+    */
 
     if (tickCounter >= WORLD_DAY_CYCLE)
     {
@@ -572,16 +756,16 @@ function render()
     gl.uniform3fv(uniforms["viewPosition"], cameraPosition);
 
     // Update lights
-    for (var i = 0; i < lights.length; i++)
+    for (var i = 0; i < world.lights.length; i++)
     {
-        if (lights[i].fresh)
+        if (world.lights[i].fresh)
         {
-            updateLight(lights[i], i);
+            updateLight(world.lights[i], i);
         }
     }
 
     // Draw blocks
-    blocks.forEach(function (block) {
+    world.blocks.forEach(function (block) {
         if (block.material != recentMaterial)
         {
             gl.uniform4fv(uniforms["material.ambient"], flatten(block.material.ambient));
@@ -592,11 +776,24 @@ function render()
 
             recentMaterial = block.material;
         }
-
-        var modelMatrix = translate(block.position);
+        
+        modelMatrix = translate(block.position);
         gl.uniformMatrix4fv(uniforms["modelMatrix"], false, flatten(modelMatrix));
-
+        
         gl.drawArrays(gl.TRIANGLES, 0, NUM_CUBE_VERTICES);
+
+        // Outlines the highlighted block
+        if (block == player.lookAtBlock)
+        {
+            modelMatrix = mult(modelMatrix, scale4(1.01, 1.01, 1.01));
+            gl.uniform4fv(uniforms["material.ambient"], flatten(vec4(0.0, 0.0, 0.0, 1.0)));
+            gl.uniform4fv(uniforms["material.diffuse"], flatten(vec4(0.0, 0.0, 0.0, 1.0)));
+            gl.uniform4fv(uniforms["material.specular"], flatten(vec4(0.0, 0.0, 0.0, 1.0)));
+
+            recentMaterial = null;
+
+            gl.drawArrays(gl.LINES, 0, NUM_CUBE_VERTICES);
+        }
     })
 
     numFrames++;
