@@ -199,30 +199,32 @@ var player = {
         if (this.lookAtBlock != null)
         {
             var eyePos = this.getEye();
-            var dx = Math.abs(this.lookAtBlock[0] - eyePos[0]);
-            var dy = Math.abs(this.lookAtBlock[1] - eyePos[1]);
-            var dz = Math.abs(this.lookAtBlock[2] - eyePos[2]);
-            var max = Math.max(dx, dy, dz);
-            var blockPos = this.lookAtBlock.position;
-            console.log(blockPos);
-            if (max == dx)
+            var dx = Math.abs(this.lookAtBlock.position[0] - eyePos[0]);
+            var dy = Math.abs(this.lookAtBlock.position[1] - eyePos[1]);
+            var dz = Math.abs(this.lookAtBlock.position[2] - eyePos[2]);
+            console.log(dx, dy, dz);
+            var blockPosX = this.lookAtBlock.position[0];
+            var blockPosY = this.lookAtBlock.position[1];
+            var blockPosZ = this.lookAtBlock.position[2];
+            if (dx > dy && dx > dz)
             {
-                if (this.lookAtBlock[0] - eyePos[0] > 0)
-                    blockPos[0] -= 1;
+                if (this.lookAtBlock.position[0] - eyePos[0] > 0)
+                    blockPosX -= 1;
                 else
-                    blockPos[0] += 1;
-            } else if (max == dy) {
-                if (this.lookAtBlock[1] - eyePos[1] > 0)
-                    blockPos[1] -= 1;
+                    blockPosX += 1;
+            } else if (dy > dx && dy > dz) {
+                if (this.lookAtBlock.position[1] - eyePos[1] > 0)
+                    blockPosY -= 1;
                 else
-                    blockPos[1] += 1;
+                    blockPosY += 1;
             } else {
-                if (this.lookAtBlock[0] - eyePos[0] > 0)
-                    blockPos[2] -= 1;
+                if (this.lookAtBlock.position[2] - eyePos[2] > 0)
+                    blockPosZ -= 1;
                 else
-                    blockPos[2] += 1;
+                    blockPosZ += 1;
             }
-            world.placeBlock("cobblestone", blockPos[0], blockPos[1], blockPos[2]);
+            if (world.getBlock(vec3(blockPosX, blockPosY, blockPosZ)) == null)
+                world.placeBlock("cobblestone", blockPosX, blockPosY, blockPosZ);
         }
     },
     "getEye": function() {
@@ -392,7 +394,8 @@ function setupInput()
                 player.moveDown();
                 break;
             case 16:    // shift(left)
-                player.sprint();
+                //player.sprint();
+                player.moveDown();
                 break;
             case 81:    // q
                 //far();
@@ -450,7 +453,8 @@ function setupInput()
                 player.stopDown();
                 break;
             case 16:    // shift(left)
-                player.stopSprint();
+                //player.stopSprint();
+                player.stopDown();
                 break;
             default:
                 return;
@@ -466,7 +470,9 @@ function setupInput()
             case 2: // middle mouse
                 break;
             case 3: // right mouse
-                //player.placeBlock();
+                player.placeBlock();
+                break;
+            default:
                 break;
         }
     });
