@@ -120,6 +120,32 @@
             gl_FragColor = fColor * texColor;
         }
     </script>
+    <script id="ui-vertex-shader" type="x-shader/x-vertex">
+        precision mediump float;
+        
+        attribute vec4 vPosition;
+        attribute vec2 vTexPos;
+
+        varying vec2 fTexPos;
+        
+        void main()
+        {
+            fTexPos = vTexPos;
+            gl_Position = vPosition;
+        }
+    </script>
+    <script id="ui-fragment-shader" type="x-shader/x-vertex">
+        precision mediump float;
+
+        uniform sampler2D texture;
+
+        varying vec2 fTexPos;
+        
+        void main()
+        {
+            gl_FragColor = texture2D(texture, fTexPos);
+        }
+    </script>
     <script type="text/javascript" src="../Common/webgl-utils.js"></script>
     <script type="text/javascript" src="../Common/initShaders.js"></script>
     <script type="text/javascript" src="../Common/MV.js"></script>
@@ -129,7 +155,15 @@
     <canvas id="gl-canvas" width="1024" height="576">
     Canvas was not loaded - Brower does not support HTML5.
     </canvas>
-    <img id="cobblestone" src="textures/Cobblestone.png" hidden></img>
-    <img id="test" src="textures/Test.png" hidden></img>
+    <img id="cobblestone" src="resources/textures/Cobblestone.png" hidden></img>
+    <img id="wood" src="resources/textures/Wood.jpg" hidden></img>
+    <img id="metal" src="resources/textures/Metal.jpg" hidden></img>
+    <img id="marble" src="resources/textures/Marble.jpg" hidden></img>
+    <img id="lamphead" src="resources/textures/LampHead.png" hidden></img>
+    <img id="brick" src="resources/textures/Brick.jpg" hidden></img>
+    <img id="sand" src="resources/textures/Sand.jpg" hidden></img>
+    <img id="grass" src="resources/textures/Grass.jpg" hidden></img>
+    <img id="hotbar" src="resources/ui/Hotbar.png" hidden></img>
+    <img id="test" src="resources/textures/Test.png" hidden></img>
 </body>
 </html>

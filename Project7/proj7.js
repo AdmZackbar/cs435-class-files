@@ -1,10 +1,16 @@
 var gl, canvas;
 
+var lightingShader, uiShader;
+
 // Stores all the vertices in the cube
 var cubeVertices = [];
 var NUM_CUBE_VERTICES = 36;
 var cubeNormals = [];
 var cubeTexturePoints = [];
+
+// Stores all the UI element vertices
+var hotbarVertices = [];
+var hotbarTexturePoints = [];
 
 // Uniform locations
 var uniforms = {};
@@ -34,7 +40,14 @@ var MATERIAL_FIELDS = [
 // Material textures
 var TEXTURES = [
     "test",
-    "cobblestone"
+    "cobblestone",
+    "wood",
+    "metal",
+    "marble",
+    "lamphead",
+    "brick",
+    "sand",
+    "grass"
 ];
 // Contains the location that the texture was loaded into
 var textureLocations = {};
@@ -79,7 +92,56 @@ var MATERIALS = {
         vec4(0.9, 0.9, 0.9, 1.0),
         10.0,
         "cobblestone"
-    )
+    ),
+    "wood": new Material(
+        vec4(0.4, 0.4, 0.4, 1.0),
+        vec4(0.8, 0.8, 0.8, 1.0),
+        vec4(0.9, 0.9, 0.9, 1.0),
+        10.0,
+        "wood"
+    ),
+    "metal": new Material(
+        vec4(0.6, 0.6, 0.65, 1.0),
+        vec4(0.8, 0.8, 0.85, 1.0),
+        vec4(0.95, 0.95, 1.0, 1.0),
+        100.0,
+        "metal"
+    ),
+    "marble": new Material(
+        vec4(0.2, 0.2, 0.2, 1.0),
+        vec4(0.45, 0.45, 0.45, 1.0),
+        vec4(0.7, 0.7, 0.7, 1.0),
+        100.0,
+        "marble"
+    ),
+    "lamphead": new Material(
+        vec4(1.0, 1.0, 1.0, 1.0),
+        vec4(0.45, 0.45, 0.45, 1.0),
+        vec4(0.8, 0.8, 0.8, 1.0),
+        100.0,
+        "lamphead"
+    ),
+    "brick": new Material(
+        vec4(0.3, 0.3, 0.3, 1.0),
+        vec4(0.45, 0.45, 0.45, 1.0),
+        vec4(0.7, 0.7, 0.7, 1.0),
+        5.0,
+        "brick"
+    ),
+    "sand": new Material(
+        vec4(0.3, 0.3, 0.3, 1.0),
+        vec4(0.45, 0.45, 0.45, 1.0),
+        vec4(0.7, 0.7, 0.7, 1.0),
+        20.0,
+        "sand"
+    ),
+    "grass": new Material(
+        vec4(0.3, 0.3, 0.3, 1.0),
+        vec4(0.45, 0.45, 0.45, 1.0),
+        vec4(0.7, 0.7, 0.7, 1.0),
+        5.0,
+        "grass"
+    ),
 };
 
 // Stores all the info about the world and functions for manipulating it
@@ -89,6 +151,7 @@ var world = {
     "depth": 31,
     "shiftX": null,
     "shiftZ": null,
+    "isNight": false,
     "blocks": [],
     "blockArray": [this.width],
     "lights": [],
@@ -152,6 +215,7 @@ var player = {
     "walkSpeed": 3.5,
     "sprintSpeed": 6,
     "lookAtBlock": null,
+    "useMaterial": "cobblestone",
     "calculateLook": function(deltaX, deltaY) {
         this.theta += (deltaX/canvas.width)*SENSITIVITY*fovy;
         if (this.theta >= 360)
@@ -202,7 +266,6 @@ var player = {
             var dx = Math.abs(this.lookAtBlock.position[0] - eyePos[0]);
             var dy = Math.abs(this.lookAtBlock.position[1] - eyePos[1]);
             var dz = Math.abs(this.lookAtBlock.position[2] - eyePos[2]);
-            console.log(dx, dy, dz);
             var blockPosX = this.lookAtBlock.position[0];
             var blockPosY = this.lookAtBlock.position[1];
             var blockPosZ = this.lookAtBlock.position[2];
@@ -224,7 +287,7 @@ var player = {
                     blockPosZ += 1;
             }
             if (world.getBlock(vec3(blockPosX, blockPosY, blockPosZ)) == null)
-                world.placeBlock("cobblestone", blockPosX, blockPosY, blockPosZ);
+                world.placeBlock(player.useMaterial, blockPosX, blockPosY, blockPosZ);
         }
     },
     "getEye": function() {
@@ -294,7 +357,6 @@ var RENDER_DISTANCE = 30;
 // Amount of time in a full "day"(in ticks)
 var WORLD_DAY_CYCLE = 10.0*TICKRATE;
 var tickCounter = 0;
-var dayCounter = 0;
 
 // Transform for model view matrices
 function scale4(a, b, c) {
@@ -340,14 +402,16 @@ window.onload = function()
     //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     // Set up shaders
-    var program = initShaders(gl, "vertex-shader", "fragment-shader");
-    gl.useProgram(program);
-
+    lightingShader = initShaders(gl, "vertex-shader", "fragment-shader");
+    uiShader = initShaders(gl, "ui-vertex-shader", "ui-fragment-shader");
     createGeometry();
-    createBuffers(program);
-    setUniforms(program);
-    setProjection();
-    loadTextures(program);
+
+    gl.useProgram(lightingShader);
+    createBuffers(lightingShader);
+    setUniforms(lightingShader);
+    loadTextures(lightingShader);
+
+    createUI();
 
     generateWorld();
 
@@ -397,29 +461,41 @@ function setupInput()
                 //player.sprint();
                 player.moveDown();
                 break;
-            case 81:    // q
-                //far();
+            case 49:    // 1
+                player.useMaterial = "cobblestone";
+                console.log("Now placing cobblestone");
                 break;
-            case 69:    // e
-                //near();
+            case 50:    // 2
+                player.useMaterial = "wood";
+                console.log("Now placing wood");
                 break;
-            case 73:    // i
-                cameraUp();
+            case 51:    // 3
+                player.useMaterial = "metal";
+                console.log("Now placing metal");
                 break;
-            case 75:    // k
-                pause();
+            case 52:    // 4
+                player.useMaterial = "marble";
+                console.log("Now placing marble");
                 break;
-            case 74:    // j
-                moveLeft();
+            case 53:    // 5
+                player.useMaterial = "brick";
+                console.log("Now placing brick");
                 break;
-            case 76:    // l
-                moveRight();
+            case 54:    // 6
+                player.useMaterial = "sand";
+                console.log("Now placing sand");
                 break;
-            case 85:    // u
-                forward();
+            case 55:    // 7
+                player.useMaterial = "grass";
+                console.log("Now placing grass");
                 break;
-            case 79:    // o
-                backward();
+            case 219:   // [
+                world.lights[1].attenuationCoef *= 2;
+                world.lights[1].fresh = true;
+                break;
+            case 221:   // ]
+                world.lights[1].attenuationCoef /= 2;
+                world.lights[1].fresh = true;
                 break;
             default:
                 return;
@@ -569,6 +645,34 @@ function createGeometry()
     addFace(6, 3, 0, 2);    // z
 }
 
+function createUI() {
+    var hotbarPoints = [
+        vec4(-0.8, -0.6, 0.0, 1.0),
+        vec4(-0.8, -0.8, 0.0, 1.0),
+        vec4(0.8, -0.8, 0.0, 1.0),
+        vec4(0.8, -0.6, 0.0, 1.0),
+    ]
+    var texturePoints = [
+        vec2(0.0, 1.0),
+        vec2(0.0, 0.0),
+        vec2(1.0, 0.0),
+        vec2(1.0, 1.0)
+    ];
+
+    hotbarVertices.push(hotbarPoints[0]);
+    hotbarTexturePoints.push(texturePoints[0]);
+    hotbarVertices.push(hotbarPoints[1]);
+    hotbarTexturePoints.push(texturePoints[1]);
+    hotbarVertices.push(hotbarPoints[2]);
+    hotbarTexturePoints.push(texturePoints[2]);
+    hotbarVertices.push(hotbarPoints[0]);
+    hotbarTexturePoints.push(texturePoints[0]);
+    hotbarVertices.push(hotbarPoints[2]);
+    hotbarTexturePoints.push(texturePoints[2]);
+    hotbarVertices.push(hotbarPoints[3]);
+    hotbarTexturePoints.push(texturePoints[3]);
+}
+
 function createBuffers(program)
 {
     createVertexBuffer(program, cubeVertices);
@@ -674,26 +778,42 @@ function generateWorld()
     {
         for (var j = -Math.floor(world.depth/2); j < Math.floor(world.depth/2); j++)
         {
-            world.placeBlock("cobblestone", i, 0, j);
+            if (i != 0 && j != 0)
+                world.placeBlock("grass", i, 0, j);
+            else
+                world.placeBlock("cobblestone", i, 0, j);
         }
     }
-    world.placeBlock("cobblestone", 1, 1, 1);
-    world.placeBlock("cobblestone", 1, 2, 1);
-    world.placeBlock("cobblestone", 1, 3, 1);
-    world.placeBlock("cobblestone", 1, 4, 1);
-    world.placeBlock("cobblestone", 1, 5, 1);
+    world.placeBlock("lamphead", 0, 1, 0);
+    world.placeBlock("cobblestone", 3, 1, -3);
+    world.placeBlock("wood", 3, 1, -2);
+    world.placeBlock("metal", 3, 1, -1);
+    world.placeBlock("marble", 3, 1, 0);
+    world.placeBlock("brick", 3, 1, 1);
+    world.placeBlock("sand", 3, 1, 2);
 
     var sunlight = new Light(
-        vec4(0.3, 0.3, 0.3, 1.0),
-        vec4(0.9, 0.9, 0.9, 1.0),
-        vec4(1.0, 1.0, 1.0, 1.0),
+        vec4(0.2, 0.2, 0.2, 1.0),
+        vec4(0.5, 0.5, 0.5, 1.0),
+        vec4(0.8, 0.8, 0.8, 1.0),
         0.0,
         0.0,
         1.0,
         0.0,
-        false
+        false,
+        true
+    );
+    var lamp = new Light(
+        vec4(0.0, 0.0, 0.0, 1.0),
+        vec4(0.6, 0.3, 0.3, 1.0),
+        vec4(1.0, 0.9, 0.9, 1.0),
+        0.1,
+        1.0,
+        1.0,
+        1.0
     );
     world.lights.push(sunlight);
+    world.lights.push(lamp);
 }
 
 function updateWorld()
@@ -704,10 +824,12 @@ function updateWorld()
     //player.velocity[1] -= GRAVITY/TICKRATE;
 
     // Simulate sun movement
-    var z = Math.cos(tickCounter/WORLD_DAY_CYCLE*Math.PI);
-    var y = Math.sin(tickCounter/WORLD_DAY_CYCLE*Math.PI);
-    world.lights[0].position = vec4(0.0, y, z, 0.0);
-    world.lights[0].fresh = true;
+    //var z = Math.cos(tickCounter/WORLD_DAY_CYCLE*Math.PI);
+    //var y = Math.sin(tickCounter/WORLD_DAY_CYCLE*Math.PI);
+    //if (world.isNight)
+    //    y = -y;
+    //world.lights[0].position = vec4(0.0, y, z, 0.0);
+    //world.lights[0].fresh = true;
 
     // Update player position
     var deltaPos = vec3(player.velocity[0]/TICKRATE, player.velocity[1]/TICKRATE, player.velocity[2]/TICKRATE);
@@ -744,7 +866,7 @@ function updateWorld()
     if (tickCounter >= WORLD_DAY_CYCLE)
     {
         tickCounter = 0;
-        dayCounter++;
+        world.isNight = !world.isNight;
     }
 }
 
@@ -755,6 +877,10 @@ function updateLook(event)
 
 function render()
 {
+    // Setup lighting shader
+    gl.useProgram(lightingShader);
+    setProjection();
+
     var up = vec3(0.0, 1.0, 0.0);
     cameraPosition = player.getEye();
     var viewMatrix = lookAt(cameraPosition, player.lookAt, up);
@@ -801,10 +927,51 @@ function render()
             gl.drawArrays(gl.LINES, 0, NUM_CUBE_VERTICES);
         }
     })
+    
+    // Set up UI shader
+    //loadUIShader();
+    //gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     numFrames++;
     if (!isPaused)
         requestAnimationFrame(render);
+}
+
+function loadUIShader()
+{
+    gl.useProgram(uiShader);
+
+    var vBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(hotbarVertices), gl.STATIC_DRAW);
+    
+    var vPosition = gl.getAttribLocation(uiShader, "vPosition");
+    gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vPosition);
+
+    var tBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(hotbarTexturePoints), gl.STATIC_DRAW);
+    
+    var vTexPos = gl.getAttribLocation(uiShader, "vTexPos");
+    gl.vertexAttribPointer(vTexPos, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(vTexPos);
+
+    var hotbar = gl.createTexture();
+    var image = document.getElementById("hotbar");
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    if (isPowerOf2(image.width) && isPowerOf2(image.height))
+        gl.generateMipmap(gl.TEXTURE_2D);
+    else
+    {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
+    gl.uniform1i(gl.getUniformLocation(uiShader, "texture"), hotbar);
 }
 
 function updateLight(light, index)
