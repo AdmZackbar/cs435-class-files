@@ -1,3 +1,24 @@
+/*
+ * File:    proj7.js
+ * Author:  Zach Wassynger
+ * Purpose: Part of project 7 in CS 435. As an open ended project, I
+ *          decided to build a sandbox-esque "game", with different
+ *          types of blocks and materials to put down and remove.
+ *          I implemented Phong-Blinn lighting with point and directional
+ *          lighting.
+ * Input:   Use the WASD or arrow keys to manipulate the location
+ *          of the viewer. Use spacebar to move upward, and left-shift
+ *          or left-control to move downward. Use the mouse to look
+ *          around the world.
+ *          Use left click to remove blocks from the world, and right
+ *          click to add them. You can change what block to place with
+ *          the number keys(1-7). The console will tell you what you
+ *          have swapped to. Use the brackets to change the attenuation
+ *          of the light in the middle of the map(e.g. brighter/darker).
+ *          You cannot build beyond the edges of the floor(change the
+ *          map size values in this file if you want).
+ */
+
 var gl, canvas;
 
 var lightingShader, uiShader;
