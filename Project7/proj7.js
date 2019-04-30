@@ -236,6 +236,7 @@ var player = {
     "walkSpeed": 3.5,
     "sprintSpeed": 6,
     "lookAtBlock": null,
+    "placementBlock": null,
     "useMaterial": "cobblestone",
     "calculateLook": function(deltaX, deltaY) {
         this.theta += (deltaX/canvas.width)*SENSITIVITY*fovy;
@@ -270,10 +271,12 @@ var player = {
                 this.lookAtBlock = block;
                 return block;
             }
+            this.placementBlock = new Block(this.useMaterial, Math.floor(vector[0]), Math.floor(vector[1]), Math.floor(vector[2]));
             vector = add(vector, adjustedDelta);
             block = world.getBlock(vector);
         }
         this.lookAtBlock = null;
+        this.placementBlock = null;
         return null;
     },
     "breakBlock": function() {
@@ -281,35 +284,8 @@ var player = {
             world.removeBlock(this.lookAtBlock.position);
     },
     "placeBlock": function() {
-        if (this.lookAtBlock != null)
-        {
-            var eyePos = this.getEye();
-            var dx = Math.abs(this.lookAtBlock.position[0] - eyePos[0]);
-            var dy = Math.abs(this.lookAtBlock.position[1] - eyePos[1]);
-            var dz = Math.abs(this.lookAtBlock.position[2] - eyePos[2]);
-            var blockPosX = this.lookAtBlock.position[0];
-            var blockPosY = this.lookAtBlock.position[1];
-            var blockPosZ = this.lookAtBlock.position[2];
-            if (dx > dy && dx > dz)
-            {
-                if (this.lookAtBlock.position[0] - eyePos[0] > 0)
-                    blockPosX -= 1;
-                else
-                    blockPosX += 1;
-            } else if (dy > dx && dy > dz) {
-                if (this.lookAtBlock.position[1] - eyePos[1] > 0)
-                    blockPosY -= 1;
-                else
-                    blockPosY += 1;
-            } else {
-                if (this.lookAtBlock.position[2] - eyePos[2] > 0)
-                    blockPosZ -= 1;
-                else
-                    blockPosZ += 1;
-            }
-            if (world.getBlock(vec3(blockPosX, blockPosY, blockPosZ)) == null)
-                world.placeBlock(player.useMaterial, blockPosX, blockPosY, blockPosZ);
-        }
+        if (this.placementBlock != null)
+            world.placeBlock(this.useMaterial, this.placementBlock.position[0], this.placementBlock.position[1], this.placementBlock.position[2]);
     },
     "getEye": function() {
         return add(this.position, vec3(0, this.eyeHeight, 0));
